@@ -57,7 +57,24 @@ reference files.
 
 ## Install
 
-Copy one folder into your skills directory:
+In a Claude Code session, add the marketplace and install the plugin:
+
+```
+/plugin marketplace add timgavin/claude-plugins
+/plugin install livewire-audit@timgavin
+```
+
+After it installs, run `/reload-plugins`. The skill is then invoked as
+`/livewire-audit:livewire-audit` — Claude Code namespaces plugin skills by plugin name — or
+just ask in plain language ("audit my Livewire app").
+
+To get new releases automatically, open `/plugin`, select the `timgavin` marketplace, and
+turn on auto-update. Third-party marketplaces have auto-update off by default, so this is a
+one-time toggle on your end.
+
+### Manual install (no plugin system)
+
+To drop the skill in by hand, copy the one folder into your skills directory:
 
 ```bash
 tmp=$(mktemp -d)
@@ -70,12 +87,16 @@ Or per-project: copy it to `.claude/skills/livewire-audit` inside the project in
 
 ## Use
 
-From a Claude Code session in your Laravel project:
+From a Claude Code session in your Laravel project, run the audit. The command depends on
+how you installed it:
 
-```
-/livewire-audit          read-only audit; writes a report to livewire-audit-<date>.md in the project root
-/livewire-audit --fix    audit, then apply fixes for confirmed findings
-```
+- Plugin install: `/livewire-audit:livewire-audit`
+- Manual install: `/livewire-audit`
+- Either way, plain language works too: "audit my Livewire app"
+
+The read-only audit writes a report to `livewire-audit-<date>.md` in the project root.
+Append `--fix` to apply fixes for confirmed findings instead of only reporting them — e.g.
+`/livewire-audit:livewire-audit --fix`.
 
 The audit makes no changes to your code and runs no migrations or seeders. If your app
 happens to be runnable, it will additionally pull a real rendered page and confirm
