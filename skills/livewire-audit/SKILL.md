@@ -1,6 +1,6 @@
 ---
 name: livewire-audit
-description: Use when auditing or hardening the security of a Laravel Livewire (v3 or v4) app - snapshot data exposure, client-tamperable properties, missing #[Locked], unauthorized public actions, and the full client-callable surface. Triggers on /livewire-audit, "audit livewire", "harden livewire", "check livewire security", or questions about whether Livewire components leak data or are tamper-proof. Append --fix to apply fixes rather than only report them.
+description: 'Use when auditing or hardening the security of a Laravel Livewire (v3 or v4) app - snapshot data exposure, client-tamperable properties, missing #[Locked], unauthorized public actions, and the full client-callable surface. Triggers on /livewire-audit, "audit livewire", "harden livewire", "check livewire security", or questions about whether Livewire components leak data or are tamper-proof. Append --fix to apply fixes rather than only report them.'
 ---
 
 # Livewire Security Audit

@@ -24,9 +24,25 @@ so the audit tool is graded against the right file:
 - **LW-22** (unprotected full-page Livewire component route) — app-level, planted
   in `v4-app/routes/web.php`.
 
-**LW-23** (untyped public properties) is satisfied broadly: it is planted by the
-untyped `public $...` declarations throughout the vulnerable components, not by any
-single line.
+**LW-23** (untyped public properties) is planted by the untyped `public $...`
+declarations throughout the vulnerable components. Every vulnerable component with at
+least one untyped public property carries an LW-23 row in its table below; the clean
+components are fully typed.
+
+## Grading notes
+
+- Consolidation follows SKILL.md: checks that fire on the same code AND share the
+  same fix may merge into one report block, and a merged block satisfies every check
+  ID it names. Rows below marked `LW-02 + LW-04` are one such block (checklist LW-04
+  says to tag both on a mount-set scalar).
+- Secondary check IDs that legitimately co-fire on an already-vulnerable component
+  are correct, not invented, when they are consistent with checklist.md — e.g. LW-03
+  on `profile/show`'s never-rendered `$apiKeys`, or LW-04 on any client-writable
+  property reaching a sensitive sink. "No invented findings" is graded against the
+  clean components and against findings with no quotable evidence.
+- `/`, `/pricing`, and `/feed` in `v4-app/routes/web.php` are intentionally public
+  routes. LW-22 is planted only on `/account/settings`; an LW-22 finding on `/feed`
+  is a false positive.
 
 ---
 
@@ -38,29 +54,37 @@ convention.
 | File | Check IDs | Plant description | Severity |
 |------|-----------|-------------------|----------|
 | `v4-app/resources/views/components/billing/⚡checkout.blade.php` | LW-01 | `pay()` charges money with no authorization / ownership check | Critical |
-| | LW-02 | untyped, unlocked `public $amount` and `public $orderId` tamperable from the client | Critical |
+| | LW-02 + LW-04 | untyped, unlocked `public $amount` and `public $orderId` tamperable from the client — mount-set, reachable via `$wire.set()`, drive the charge (one block, fix lock-scalar) | Critical |
 | | LW-18 | `pay()` charges a payment gateway with no rate limiting / throttle | High |
+| | LW-19 | `pay()` persists `charged_amount`/`note` with no validation | High |
 | | LW-23 | untyped public properties | High |
 | `v4-app/resources/views/components/admin/⚡user-editor.blade.php` | LW-01 | `save()` and `makeAdmin()` mutate a client-tamperable `$userId`'s account (`makeAdmin()` sets `role='admin'`) with no authorization / ownership check | Critical |
 | | LW-15 | `save()` does `$user->update($this->all())` — full mass-assignment from component state | Critical |
 | | LW-07 | `public function makeAdmin()` privileged action never referenced by any `wire:` directive but still callable | High |
-| | LW-02 | untyped, unlocked `public $userId` used in queries | High |
+| | LW-02 + LW-04 | untyped, unlocked `public $userId` used in queries — mount-set, reachable via `$wire.set()` (one block, fix lock-scalar) | High |
+| | LW-19 | `save()` passes `$this->all()` to `update()` with no validation | High |
 | | LW-23 | untyped public properties | High |
 | `v4-app/resources/views/components/profile/⚡show.blade.php` | LW-08 | `public $apiKeys` holds secrets copied from the model, serialized to the browser | Critical |
 | | LW-08 | `public $debugInfo` array embeds `config('services.stripe.secret')` — secret serialized into `wire:snapshot` | Critical |
 | | LW-09 | `public string $email` PII copied into component state | Medium |
 | | LW-03 | `public $debugInfo` holds internal config (db host, stripe secret) and is never rendered | High |
+| | LW-19 | `updateDisplayName()` persists `$displayName` with no validation | Medium |
+| | LW-23 | untyped public properties (`$apiKeys`, `$debugInfo`, `$displayName`) | Medium |
 | `v4-app/resources/views/components/feed/⚡index.blade.php` | LW-16 | client-controlled `$this->filter` interpolated into `whereRaw(...)` — SQL injection | Critical |
 | | LW-06 | `#[Url] public $filter` bound to query string with no validation / allow-list | High |
 | | LW-17 | `{!! $post->body !!}` renders user content unescaped — stored XSS | High |
+| | LW-23 | untyped `#[Url] public $filter` feeds a raw SQL query | High |
 | `v4-app/resources/views/components/messages/⚡composer.blade.php` | LW-05 | `#[On('refresh-inbox')]` loads another user's messages by id from the event payload, no auth check | Critical |
 | | LW-04 | `wire:model="recipientId"` drives the DB write in `send()` | High |
 | | LW-18 | `send()` has no rate limiting | Medium |
 | | LW-19 | recipient validated with only `['required']` — no existence/integer/ownership rule | Medium |
+| | LW-23 | untyped public `$recipientId` and `$body` | High |
 | `v4-app/resources/views/components/stats/⚡dashboard.blade.php` | LW-10 | `#[Computed(cache: true)]` account summary not keyed by user — cross-user cache bleed | High |
 | | LW-11 | `#[Computed(persist: true, seconds: 86400)]` subscription persisted per-day, same bleed risk | High |
 | | LW-13 | `addError()` echoes the submitted card number back into the message | High |
+| | LW-23 | untyped public `$cardNumber` | Low |
 | `v4-app/resources/views/components/uploads/⚡avatar.blade.php` | LW-14 | `WithFileUploads` `public $avatar` with no `#[Validate]` and no validation in `save()` | High |
+| | LW-23 | untyped public `$avatar` | Medium |
 | `v4-app/resources/views/components/orders/⚡status-editor.blade.php` | LW-24 | `updatedStatus()` lifecycle hook writes the order on every property set with no ownership check | Critical |
 | | LW-05 | legacy `$listeners` array `['order-refresh' => 'reloadOrder']` loads any order by id from the event payload, no auth check | High |
 | | LW-23 | untyped public property `$status` | High |
@@ -70,13 +94,14 @@ convention.
 | `v4-app/resources/views/components/auth/⚡return-redirect.blade.php` | LW-27 | `#[Url] $returnTo` is passed straight to `$this->redirect(...)` in `continue()` with no allow-list | High |
 | | LW-23 | untyped public property `$returnTo` | High |
 | `v4-app/resources/views/components/profile/⚡bulk-update.blade.php` | LW-15 | `save()` does `auth()->user()->update($this->data)` where `$data` is an array bound key-by-key — deep-write key injection | Critical |
+| | LW-19 | `save()` persists `$this->data` with no validation | High |
 
 ## v4-app — clean components (expected: zero findings)
 
 | File | Why it is clean |
 |------|-----------------|
 | `v4-app/resources/views/components/settings/⚡notifications.blade.php` | typed properties, `#[Locked] int $preferenceId`, `$this->authorize(...)` + `$this->validate(...)` in the toggle action |
-| `v4-app/resources/views/components/posts/⚡show.blade.php` | model-typed `public Post $post`, authorized `like()`/`comment()`, escaped `{{ }}` output, typed `mount(Post $post)` |
+| `v4-app/resources/views/components/posts/⚡show.blade.php` | model-typed `public Post $post`, authorized `like()`/`comment()`, rate-limited `comment()`, escaped `{{ }}` output, typed `mount(Post $post)` |
 
 ## v4-app — app-level files
 
@@ -98,7 +123,8 @@ the protected route).
 | File | Check IDs | Plant description | Severity |
 |------|-----------|-------------------|----------|
 | `v3-app/app/Livewire/OrderEditor.php` | LW-01 | `cancel()` mutates an order with no authorization / ownership check | Critical |
-| | LW-02 | untyped, unlocked `public $orderId` tamperable from the client | Critical |
+| | LW-02 + LW-04 | untyped, unlocked `public $orderId` tamperable from the client — mount-set, reachable via `$wire.set()` (one block, fix lock-scalar) | Critical |
+| | LW-19 | `cancel()` persists `$reason` with no validation | High |
 | | LW-23 | untyped public property | High |
 
 ## v3-app — clean component (expected: zero findings)
@@ -121,7 +147,7 @@ instances across both apps.
 - [x] LW-01 (x3) — billing/checkout `pay()`, admin/user-editor `save()`+`makeAdmin()`, v3 OrderEditor `cancel()`
 - [x] LW-02 (x3) — billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`)
 - [x] LW-03 (x1) — profile/show `$debugInfo`
-- [x] LW-04 (x1) — messages/composer `wire:model="recipientId"`
+- [x] LW-04 (x4) — messages/composer `wire:model="recipientId"`; LW-02 co-tags on billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`)
 - [x] LW-05 (x2) — messages/composer `#[On('refresh-inbox')]`; orders/status-editor legacy `$listeners` array `order-refresh` => `reloadOrder`
 - [x] LW-06 (x1) — feed/index `#[Url] $filter`
 - [x] LW-07 (x1) — admin/user-editor `makeAdmin()`
@@ -136,7 +162,7 @@ instances across both apps.
 - [x] LW-16 (x1) — feed/index `whereRaw` interpolation
 - [x] LW-17 (x1) — feed/index `{!! $post->body !!}`
 - [x] LW-18 (x2) — messages/composer `send()` no rate limit; billing/checkout `pay()` charges a card with no rate limit
-- [x] LW-19 (x1) — messages/composer recipient `['required']` only
+- [x] LW-19 (x6) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
 - [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level, observation)
 - [x] LW-22 (x1) — routes/web.php unprotected `/account/settings`

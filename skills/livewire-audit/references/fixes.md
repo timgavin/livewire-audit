@@ -28,7 +28,7 @@ NOT: do not lock a property the user edits through `wire:model` — locking bloc
 
 ## model-typed-property
 
-When to use (LW-02 alt, LW-23): a record is held as an id scalar and re-loaded on every action, or you want client tampering structurally impossible rather than attribute-guarded.
+When to use (LW-02 alt): a record is held as an id scalar and re-loaded on every action, or you want client tampering structurally impossible rather than attribute-guarded.
 
 ```php
 public Post $post;   // client cannot set/get model internals; serialized as class+key only
@@ -88,7 +88,7 @@ NOT: do not invent the policy ability or gate name — if the correct rule is no
 
 ## validate-untrusted-binding
 
-When to use (LW-06, LW-19): a public property feeds a query, redirect, view path, or branch and arrives from the client (including `#[Url]` query-string properties) without validation.
+When to use (LW-04, LW-06, LW-19): a public property feeds a query, redirect, view path, or branch and arrives from the client (including `#[Url]` query-string properties) without validation.
 
 ```php
 use Livewire\Attributes\Url;

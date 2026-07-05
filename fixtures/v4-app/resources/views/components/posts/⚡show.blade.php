@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Post;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Component;
 
 new class extends Component {
@@ -28,10 +29,18 @@ new class extends Component {
             'comment' => ['required', 'string', 'max:1000'],
         ]);
 
-        $this->post->comments()->create([
-            'user_id' => auth()->id(),
-            'body' => $validated['comment'],
-        ]);
+        $key = 'post-comment:'.auth()->id();
+
+        if (! RateLimiter::attempt($key, 10, function () use ($validated) {
+            $this->post->comments()->create([
+                'user_id' => auth()->id(),
+                'body' => $validated['comment'],
+            ]);
+        })) {
+            $this->addError('comment', 'Too many comments. Please try again shortly.');
+
+            return;
+        }
 
         $this->reset('comment');
     }

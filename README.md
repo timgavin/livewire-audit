@@ -79,6 +79,7 @@ To drop the skill in by hand, copy the one folder into your skills directory:
 ```bash
 tmp=$(mktemp -d)
 git clone --depth 1 https://github.com/timgavin/livewire-audit.git "$tmp"
+mkdir -p ~/.claude/skills
 cp -R "$tmp/skills/livewire-audit" ~/.claude/skills/livewire-audit
 rm -rf "$tmp"
 ```
@@ -126,7 +127,8 @@ here," it collects the question for you instead of inventing an answer.
 
 ## Sample output
 
-Trimmed from a real run against a deliberately vulnerable test app:
+Trimmed (and lightly edited) from a real run against an earlier, smaller revision of
+the bundled fixture apps — the counts reflect that revision, not the current corpus:
 
 ```markdown
 # Livewire Security Audit - v4-app - 2026-06-11
@@ -134,7 +136,7 @@ Livewire version: v4 | Components audited: 9 | Findings: 17 (C/H/M/L/I: 5/4/3/3/
 
 ## Critical
 
-### [LW-08] Live secrets (Stripe secret key, DB host) serialized into the page snapshot - resources/views/components/profile/show.blade.php:22-27
+### [LW-08] Live secrets (Stripe secret key, DB host) serialized into the page snapshot - resources/views/components/profile/⚡show.blade.php:22-27
 Evidence: `'stripe_key' => config('services.stripe.secret'),` assigned to the public
 array property `public $debugInfo = [];`
 Exploit: `$debugInfo` is a plain PHP array, so it serializes in full into the
@@ -143,7 +145,7 @@ it reads the live Stripe secret key in plaintext.
 Fix: fixes.md "computed-instead-of-public" - debug config values must never sit on a
 client-serialized property.
 
-### [LW-16] SQL injection via #[Url] filter interpolated into whereRaw - resources/views/components/feed/index.blade.php:15
+### [LW-16] SQL injection via #[Url] filter interpolated into whereRaw - resources/views/components/feed/⚡index.blade.php:15
 Evidence: `->whereRaw("category = '$this->filter'")`
 Exploit: `$filter` is hydrated straight from the `?filter=` query string and
 interpolated unbound into raw SQL. `/feed?filter=' OR '1'='1` controls the query, and
@@ -153,7 +155,7 @@ Fix: fixes.md "bind-not-interpolate" - bound where() plus an allowlist on $filte
 ...
 
 ## Clean components
-- resources/views/components/posts/show.blade.php - model-typed property, authorized
+- resources/views/components/posts/⚡show.blade.php - model-typed property, authorized
   actions, validated input, escaped output.
 
 ## Discarded during verification
