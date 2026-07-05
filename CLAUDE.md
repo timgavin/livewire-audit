@@ -76,9 +76,14 @@ protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is fo
 - On an ambiguous authorization decision (which policy/gate applies), stop and ask — never guess.
 - "Nothing found" is a valid result; never pad a report or invent findings.
 
-## Component discovery nuance (v4)
+## Component discovery nuance
 
 The discovery marker for a v4 single-/multi-file component is the embedded `new ... class extends
-...Component` PHP block, **not** the ⚡ (U+26A1) filename prefix — the glyph is cosmetic. SKILL.md
-Step B unions three searches (anonymous-class regex, `extends Component`, ⚡ filename) to catch all
-forms; keep all three if you touch inventory logic.
+...Component` PHP block, **not** the ⚡ (U+26A1) filename prefix — the glyph is cosmetic. Volt
+(`livewire/volt`, runs on Livewire 3 AND 4 per its composer constraint) adds forms none of those
+markers match: functional-API files (`use function Livewire\Volt\{state};` — no class at all) and
+inline `@volt(...)` fragments inside regular views. SKILL.md Step B therefore unions five searches
+(anonymous-class regex, `extends Component`, ⚡ filename, literal `Livewire\Volt`, `@volt(`) plus a
+`Volt::mount(` check for custom component directories; keep all of them if you touch inventory
+logic. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is
+caught by the first two searches already.

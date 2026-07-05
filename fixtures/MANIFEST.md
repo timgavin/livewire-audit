@@ -133,7 +133,32 @@ the protected route).
 |------|-----------------|
 | `v3-app/app/Livewire/ContactForm.php` | typed `#[Validate]` properties, rate-limited `submit()`, no privileged actions |
 
-Supporting (non-planted) files: `v3-app/composer.json`,
+## v3-app — Volt functional components
+
+`v3-app/composer.json` declares `livewire/volt`, so Step B's Volt discovery searches must
+fire for this app. Neither file below contains `extends Component`, an anonymous
+`new ... class` block, or a ⚡ filename — if either is missing from the audited inventory,
+the discovery union failed. This is a coverage plant as much as a vulnerability plant.
+
+| File | Check IDs | Plant description | Severity |
+|------|-----------|-------------------|----------|
+| `v3-app/resources/views/pages/gift-cards/redeem.blade.php` | LW-01 | `$redeem` closure updates a gift card (financial) with no authorization / ownership check | Critical |
+| | LW-02 + LW-04 | unlocked functional state `cardId` — mount-set, reachable via `$wire.set()`, drives the redemption write (one block, fix lock-scalar in its Volt form `state([...])->locked()`) | Critical |
+| | LW-18 | `$redeem` performs a financial redemption with no rate limiting — card IDs are brute-forceable | High |
+| | LW-19 | `$redeem` persists `note` and acts on `cardId` with no validation | High |
+
+Grading note: LW-23 does NOT apply to functional Volt state — `state()` takes names and
+default values and has no native type declaration syntax (checklist.md "Volt components").
+An LW-23 finding on either Volt file is a false positive.
+
+## v3-app — clean Volt inline fragment (expected: zero findings)
+
+| File | Why it is clean |
+|------|-----------------|
+| `v3-app/resources/views/dashboard.blade.php` | inline `@volt('account-alias')` fragment: `state(['accountId'])->locked()`, `Gate::authorize(...)` + `$this->validate(...)` in `$rename`, internal lookup helper wrapped in `protect()` |
+
+Supporting (non-planted) files: `v3-app/composer.json` (declares `livewire/volt`, which
+arms the Volt discovery searches),
 `v3-app/resources/views/livewire/order-editor.blade.php`,
 `v3-app/resources/views/livewire/contact-form.blade.php`.
 
@@ -144,10 +169,10 @@ Supporting (non-planted) files: `v3-app/composer.json`,
 Each check below is planted at least once. Count is the number of distinct planted
 instances across both apps.
 
-- [x] LW-01 (x3) — billing/checkout `pay()`, admin/user-editor `save()`+`makeAdmin()`, v3 OrderEditor `cancel()`
-- [x] LW-02 (x3) — billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`)
+- [x] LW-01 (x4) — billing/checkout `pay()`, admin/user-editor `save()`+`makeAdmin()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
+- [x] LW-02 (x4) — billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`), v3 Volt gift-cards/redeem (`cardId`)
 - [x] LW-03 (x1) — profile/show `$debugInfo`
-- [x] LW-04 (x4) — messages/composer `wire:model="recipientId"`; LW-02 co-tags on billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`)
+- [x] LW-04 (x5) — messages/composer `wire:model="recipientId"`; LW-02 co-tags on billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`), v3 Volt gift-cards/redeem (`cardId`)
 - [x] LW-05 (x2) — messages/composer `#[On('refresh-inbox')]`; orders/status-editor legacy `$listeners` array `order-refresh` => `reloadOrder`
 - [x] LW-06 (x1) — feed/index `#[Url] $filter`
 - [x] LW-07 (x1) — admin/user-editor `makeAdmin()`
@@ -161,8 +186,8 @@ instances across both apps.
 - [x] LW-15 (x2) — admin/user-editor `update($this->all())`; profile/bulk-update array-deep-write `update($this->data)`
 - [x] LW-16 (x1) — feed/index `whereRaw` interpolation
 - [x] LW-17 (x1) — feed/index `{!! $post->body !!}`
-- [x] LW-18 (x2) — messages/composer `send()` no rate limit; billing/checkout `pay()` charges a card with no rate limit
-- [x] LW-19 (x6) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`
+- [x] LW-18 (x3) — messages/composer `send()` no rate limit; billing/checkout `pay()` charges a card with no rate limit; v3 Volt gift-cards/redeem `$redeem` no rate limit on a brute-forceable financial action
+- [x] LW-19 (x7) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
 - [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level, observation)
 - [x] LW-22 (x1) — routes/web.php unprotected `/account/settings`
@@ -173,4 +198,5 @@ instances across both apps.
 - [x] LW-27 (x1) — auth/return-redirect `#[Url] $returnTo` passed to `$this->redirect(...)` with no allow-list
 
 Clean files (expected zero findings): `settings/⚡notifications.blade.php`,
-`posts/⚡show.blade.php`, `v3-app/.../ContactForm.php`.
+`posts/⚡show.blade.php`, `v3-app/.../ContactForm.php`,
+`v3-app/resources/views/dashboard.blade.php` (Volt inline fragment).

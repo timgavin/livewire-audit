@@ -8,7 +8,9 @@ scalar you put on a public property is readable in page source.
 
 The skill runs a full audit of every component in your app — no sampling — and produces a
 severity-ranked report where every finding carries quoted evidence, a concrete exploit
-scenario, and a specific fix. Findings are verified twice before they reach the report:
+scenario, and a specific fix. Every component form is inventoried: class-based, v4
+single-file and multi-file, and Volt (functional API, class API, and inline `@volt`
+fragments). Findings are verified twice before they reach the report:
 audit subagents flag candidates, then the main session re-reads every flagged line and
 discards anything that does not hold up. A clean report means your components were checked
 and came back clean, not that the tool ran out of patience.

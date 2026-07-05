@@ -39,6 +39,39 @@ applicable ID. Work the checklist as a literal checklist: for each component, wa
 LW-01 through LW-27 in order and consciously decide hit/clean for each before moving on;
 do not stop at the first few obvious findings on a busy component.
 
+## Volt components
+
+Files in your batch may be Volt components (`livewire/volt` package; runs on Livewire 3
+and 4). Volt's class API (`use Livewire\Volt\Component; new class extends Component { ... }`)
+reads like any other component — apply the checks as written; `Livewire\Volt\Component`
+extends `Livewire\Component` (verified, livewire/volt src/Component.php), so `$this->validate()`,
+`$this->authorize()`, and every engine behavior below carry over. The functional API declares
+the same surfaces with different syntax; map it as follows (Volt docs,
+livewire.laravel.com/docs/3.x/volt):
+
+- `state(['x' => ...])` entries are PUBLIC properties: same snapshot serialization, same
+  `$wire.set('x', ...)` tamperability as `public $x`. Property checks (LW-02, LW-03, LW-04,
+  LW-06 via `state(...)->url()`, LW-08, LW-09) apply unchanged.
+- A closure assigned to a variable (`$save = function () { ... };`) is a PUBLIC action,
+  callable as `$wire.save()` whether or not the template references it. Action checks
+  (LW-01, LW-07, LW-18, LW-19) apply unchanged. Inside the closure, `$this` is the component.
+- `state([...])->locked()` is the `#[Locked]` equivalent — unlocked functional state holding
+  an identity/price/ownership value is LW-02, exactly like an unlocked public property.
+- `protect(function () { ... })` is the protected-method equivalent: a protected closure is
+  NOT client-callable (docs: "only accessible from within your actions"). An internal helper
+  closure left unprotected is LW-07.
+- `computed(...)` = `#[Computed]` (LW-10/LW-11); `on(['event' => fn ...])` registers
+  browser-dispatchable listeners (LW-05); `usesFileUploads()` = `WithFileUploads` (LW-14);
+  `mount(...)`, `updating(...)`, `updated(...)`, `boot(...)`, `hydrate(...)` are the
+  lifecycle hooks (LW-24); `rules(...)` / `$this->validate()` provide validation (LW-19).
+- LW-23 does NOT apply to functional `state()`: it takes property names and default values
+  and has no native type declaration syntax, so "missing type" is not an actionable finding
+  there. Never report LW-23 against functional Volt state — shape-tampering risk on such a
+  property belongs to the check it feeds (LW-02/LW-04).
+- An inline fragment (`@volt('name') ... @endvolt` inside a regular Blade view, with its
+  functional PHP block at the top of the same file) is a full component carrying all of the
+  surfaces above.
+
 ## Severity scale
 
 - **Critical** — exploitable now for data theft, privilege escalation, or financial harm

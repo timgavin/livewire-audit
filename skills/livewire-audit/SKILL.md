@@ -22,16 +22,17 @@ Confirm Livewire is installed and read its config. Run:
 
 ```
 grep -o '"livewire/livewire"[^,}]*' composer.json
+grep -o '"livewire/volt"[^,}]*' composer.json
 ls config/livewire.php 2>/dev/null && grep -nE "component_locations|class_namespace|view_path" config/livewire.php
 ```
 
-If `livewire/livewire` is absent from `composer.json`, tell the user this is not a Livewire app and stop. If `config/livewire.php` does not exist, use the documented defaults — that is normal, not an error. A directory a later step greps (`routes/`, `app/Providers/`) that does not exist makes its checks not-applicable; record that in the report rather than failing.
+If `livewire/livewire` is absent from `composer.json`, tell the user this is not a Livewire app and stop. Note whether `livewire/volt` is present — Volt runs on both major versions (its composer constraint is `livewire/livewire: ^3.6.1|^4.0`) and adds component forms with their own discovery searches in Step B. If `config/livewire.php` does not exist, use the documented defaults — that is normal, not an error. A directory a later step greps (`routes/`, `app/Providers/`) that does not exist makes its checks not-applicable; record that in the report rather than failing.
 
 Note the major version (v3 vs v4) — it determines the v3-vs-v4 notes in the checklist, though the security model is substantively identical. Record `component_locations`, `class_namespace`, and `view_path` if they deviate from defaults (`resources/views/components`, `App\Livewire`, `resources/views/livewire`); later steps honor the configured values.
 
 ## Step B: Build the component inventory
 
-Every component gets audited. No sampling. Enumerate all three forms.
+Every component gets audited. No sampling. Enumerate all four forms.
 
 **Class-based components** (v3 standard, still valid in v4):
 
@@ -53,6 +54,16 @@ Union the results of all three. The engine's own gate is the regex `<?php ... ne
 
 Honor any configured `component_locations` from `config/livewire.php` if it deviates from `resources/views/components`. For multi-file components, include the sibling `.php`, `.blade.php`, and `.js` files in the audited set for that component.
 
+**Volt components (only when Step A found `livewire/volt`).** Volt adds two forms none of the searches above can see: functional-API files (`use function Livewire\Volt\{state};` — no class, no `extends`, no ⚡) and inline `@volt('name') ... @endvolt` fragments embedded in ordinary Blade views. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is already caught by the anonymous-class and `extends Component` greps above.
+
+```
+grep -rlF --include='*.blade.php' 'Livewire\Volt' resources/views/ 2>/dev/null
+grep -rlF --include='*.blade.php' '@volt(' resources/views/ 2>/dev/null
+grep -rn 'Volt::mount(' app/ 2>/dev/null
+```
+
+Union the first two greps into the inventory: every functional or class Volt file imports from the `Livewire\Volt` namespace, and the `@volt(` grep catches inline fragments (their functional PHP block sits at the top of the same file). Confirm each candidate actually imports `Livewire\Volt` or contains an `@volt` fragment before counting it. In a functional file, `state([...])` entries are the public properties and closures assigned to variables are the public actions — the checklist's Volt note maps every check onto that syntax. The third grep is not a component search: by default Volt mounts `config('livewire.view_path')` (default `resources/views/livewire`) plus `resources/views/pages` — both already inside the search roots above — but an app's published `VoltServiceProvider` can `Volt::mount([...])` additional directories; re-run every component search in this step against any mounted path outside `resources/views/`.
+
 **Full-page component routes and their middleware.** Components reach routes several ways — class references, `Route::view()` pointing at a component view name, and Volt:
 
 ```
@@ -63,14 +74,14 @@ grep -rnE "Volt::route\(" routes/
 
 Cross-reference every `Route::view()` target against the component inventory — a `Route::view('/x', 'components.foo.bar')` that resolves to a Livewire component file IS a full-page component route and gets the same middleware scrutiny.
 
-State the total inventory count to the user (class-based + SFC/MFC + full-page routes). If the inventory is empty, say so and stop — do not audit non-Livewire code.
+State the total inventory count to the user (class-based + SFC/MFC + Volt + full-page routes). If the inventory is empty, say so and stop — do not audit non-Livewire code.
 
 ## Step C: Fan out audit subagents
 
 Dispatch read-only Explore-type subagents in **batches of 5-10 components** (count components, not files — one component = its class plus view plus any JS sibling), running batches in parallel. Each subagent prompt must include:
 
 - the checklist. Preferred: give the subagent the ABSOLUTE PATH to `references/checklist.md` and require it to read the ENTIRE file (all LW checks) before auditing — subagents have Read access, and this keeps prompts small. Alternatively paste the full text verbatim. Either way: NEVER summarize, condense, or excerpt the checklist — condensation is how checks get silently dropped (it has caused real missed findings). Shrink the batch before you shrink the checklist;
-- the detected Livewire version;
+- the detected Livewire version, and whether Volt is installed;
 - the batch's file paths (class + view + any `.js`);
 - the required findings shape: `file`, `line`, `checkId` (LW-NN), `severity` (Critical/High/Medium/Low/Info), `evidence` (a quoted line from the file), `exploit` (a concrete attacker scenario).
 

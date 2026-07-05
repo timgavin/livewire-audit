@@ -22,6 +22,8 @@ public int $postId;
 
 A tampered update to a locked property throws `CannotUpdateLockedPropertyException` (HTTP 419 in production).
 
+Volt functional API: the equivalent is chaining the modifier onto the state declaration — `state(['postId'])->locked();` (Volt docs). Apply that form, not the attribute, when fixing functional-API state.
+
 NOT: do not lock a property the user edits through `wire:model` — locking blocks legitimate binds too.
 
 ---
@@ -81,6 +83,8 @@ public function delete(): void
 ```
 
 Visibility variant — every public method is client-callable with no `wire:` directive referencing it. Change `public function recalculate()` to `protected function recalculate()` for helpers that must not be client-callable.
+
+Volt functional API: `$this->authorize(...)` works inside action closures (`Livewire\Volt\Component` extends `Livewire\Component`, and `$this` in a closure is the component). The visibility variant is `protect()`: `$helper = protect(function () { ... });` makes the closure callable from other actions via `$this->helper()` but not from the client (Volt docs).
 
 NOT: do not invent the policy ability or gate name — if the correct rule is not obvious from existing policies, stop and ask.
 
