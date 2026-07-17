@@ -1,7 +1,7 @@
 {
   "name": "livewire-audit",
   "description": "Audits Laravel Livewire (v3/v4) apps for client-facing security problems — snapshot data exposure, client-tamperable properties, missing #[Locked], unauthorized public actions — then optionally fixes them.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "Tim Gavin",
     "url": "https://github.com/timgavin"
