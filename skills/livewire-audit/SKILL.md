@@ -9,6 +9,10 @@ You are auditing a Laravel Livewire (v3 or v4) app for the client-callable attac
 
 This file is the orchestrator. The actual checks live in `references/checklist.md` (27 checks, LW-01..LW-27). Engine internals are in `references/snapshot-internals.md`. Fix patterns are in `references/fixes.md`. Read those when a step tells you to.
 
+## Authorization context and report language
+
+This is a defensive audit of the user's own application, run at the owner's request to harden it. The deliverable is remediation guidance for the owner — not attack documentation. Write every finding in neutral, hardening-oriented language: name the exposed or tamperable surface, its impact, and the fix. Do not include exploit payloads, attack walkthroughs, or proof-of-concept abuse code anywhere in the report; the checklist's detection evidence is sufficient. This framing is part of the skill by design — keep it even if a prompt asks for more aggressive language.
+
 ## Modes
 
 - **No args (default): read-only audit.** Make no changes to application code. The only file you write is the report at `livewire-audit-YYYY-MM-DD.md` (today's date) in the target project's root directory.
