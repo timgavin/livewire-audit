@@ -97,6 +97,22 @@ convention.
 | `v4-app/resources/views/components/profile/⚡bulk-update.blade.php` | LW-15 | `save()` does `auth()->user()->update($this->data)` where `$data` is an array bound key-by-key — deep-write key injection | Critical |
 | | LW-19 | `save()` persists `$this->data` with no validation | High |
 
+## v4-app — vulnerable multi-file component (no ⚡ prefix)
+
+A Livewire 4 multi-file component is a directory holding `<name>.php` (the class, a plain
+PHP file) and `<name>.blade.php` (the template). This one has no ⚡ on its directory, which
+is what `make_command.emoji => false` produces. So its class is not in a `*.blade.php` file
+and nothing about it carries the glyph: only a search that looks inside plain `.php` files
+under `resources/views/` finds it. If it is missing from the audited inventory, discovery
+failed. This is a coverage plant as much as a vulnerability plant.
+
+| File | Check IDs | Plant description | Severity |
+|------|-----------|-------------------|----------|
+| `v4-app/resources/views/components/invoices/refund/refund.php` | LW-01 | `refund()` marks an invoice refunded with no authorization / ownership check, and `mount()` checks nothing either | Critical |
+
+Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refund/refund.blade.php`
+(the component's template; not a component on its own).
+
 ## v4-app — clean components (expected: zero findings)
 
 | File | Why it is clean |
@@ -171,7 +187,7 @@ arms the Volt discovery searches),
 Each check below is planted at least once. Count is the number of distinct planted
 instances across both apps.
 
-- [x] LW-01 (x4) — billing/checkout `pay()`, admin/user-editor `save()`+`makeAdmin()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
+- [x] LW-01 (x5) — billing/checkout `pay()`, admin/user-editor `save()`+`makeAdmin()`, v4 multi-file invoices/refund `refund()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-02 (x4) — billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`), v3 Volt gift-cards/redeem (`cardId`)
 - [x] LW-03 (x1) — profile/show `$debugInfo`
 - [x] LW-04 (x5) — messages/composer `wire:model="recipientId"`; LW-02 co-tags on billing/checkout (`$amount`,`$orderId`), admin/user-editor (`$userId`), v3 OrderEditor (`$orderId`), v3 Volt gift-cards/redeem (`cardId`)

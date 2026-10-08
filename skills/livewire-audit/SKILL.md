@@ -49,14 +49,16 @@ Match each class to its view via `view_path` (default `resources/views/livewire`
 **v4 single-file and multi-file components.** The discovery marker is the embedded anonymous class block, NOT the filename prefix. The ⚡ (U+26A1, high-voltage) glyph prefix is purely cosmetic and not load-bearing — an un-prefixed file is equally valid. The real gate is content matching `<?php ... new ... class`:
 
 ```
-grep -rlE --include='*.blade.php' 'new[[:space:]].*class' resources/views/ 2>/dev/null
-grep -rl --include='*.blade.php' 'extends Component' resources/views/ 2>/dev/null
+grep -rlE --include='*.php' 'new[[:space:]].*class' resources/views/ 2>/dev/null
+grep -rl --include='*.php' 'extends Component' resources/views/ 2>/dev/null
 find resources/views -name '*⚡*' 2>/dev/null
 ```
 
 Union the results of all three. The engine's own gate is the regex `<?php ... new ... class` (`new`, then `class`, with anything between), so the first grep matches `new class`, `new #[Layout(...)] class`, and attribute-decorated anonymous classes a literal `'new class'` search would miss; the second catches components extending a custom base; the find catches prefixed files whose PHP block a grep might miss. Open any candidate and confirm it contains a `new ... class extends ...Component` block before counting it.
 
-Honor any configured `component_locations` from `config/livewire.php` if it deviates from `resources/views/components`. For multi-file components, include the sibling `.php`, `.blade.php`, and `.js` files in the audited set for that component.
+A multi-file component is a directory holding `<name>.php` (the class, a plain PHP file, not Blade) and `<name>.blade.php` (the template), plus optional `<name>.js` and `.css`; the ⚡, when used, is on the directory (verified, src/Finder/Finder.php: that pair of files is all the engine requires, with or without the prefix). That is why the greps run over `*.php`, which also matches `*.blade.php`: with the prefix turned off (`make_command.emoji` set to `false`), the class file is the only marker a multi-file component has. Count the directory as one component and include its sibling `.php`, `.blade.php`, and `.js` files in the audited set.
+
+Honor any configured `component_locations` from `config/livewire.php` if it deviates from `resources/views/components`.
 
 **Volt components (only when Step A found `livewire/volt`).** Volt adds two forms none of the searches above can see: functional-API files (`use function Livewire\Volt\{state};` — no class, no `extends`, no ⚡) and inline `@volt('name') ... @endvolt` fragments embedded in ordinary Blade views. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is already caught by the anonymous-class and `extends Component` greps above.
 

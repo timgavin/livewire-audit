@@ -29,9 +29,9 @@ Laravel/Livewire app but there is no `vendor/`, no `artisan`, and they are not m
 - `references/fixes.md` — canonical fix patterns referenced **by name** from the checklist.
 
 **2. The fixtures — `fixtures/`** (the eval corpus)
-- `v4-app/` (single-file/multi-file components, ⚡-prefixed) and `v3-app/` (class-based) are
-  deliberately-vulnerable apps with planted findings, plus clean components that act as
-  false-positive tripwires.
+- `v4-app/` (⚡-prefixed single-file components plus one un-prefixed multi-file component) and
+  `v3-app/` (class-based and Volt) are deliberately-vulnerable apps with planted findings, plus
+  clean components that act as false-positive tripwires.
 - `fixtures/MANIFEST.md` is **ground truth**: it maps every file to the check IDs it plants, with a
   one-line description and expected severity, and lists which components must come back clean.
 
@@ -103,5 +103,6 @@ markers match: functional-API files (`use function Livewire\Volt\{state};` — n
 inline `@volt(...)` fragments inside regular views. SKILL.md Step B therefore unions five searches
 (anonymous-class regex, `extends Component`, ⚡ filename, literal `Livewire\Volt`, `@volt(`) plus a
 `Volt::mount(` check for custom component directories; keep all of them if you touch inventory
-logic. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is
+logic. The first two run over `*.php`, not only `*.blade.php`: a multi-file component's class is a
+plain `.php` file, and with the ⚡ turned off it is the only thing that marks the component. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is
 caught by the first two searches already.
