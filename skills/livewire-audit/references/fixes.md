@@ -238,6 +238,7 @@ When to use (LW-22): a full-page Livewire component is registered as a route wit
 
 ```php
 Route::get('/settings', Settings::class)->middleware(['auth']);
+Route::livewire('/settings', 'pages::settings')->middleware(['auth']);   // v4 form
 ```
 
 Full-page components are routes like any other — gate them with the same middleware you would put on a controller route.

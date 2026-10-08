@@ -35,3 +35,6 @@ Route::view('/messages', 'components.messages.composer')
 Route::view('/dashboard', 'components.stats.dashboard')
     ->middleware('auth')
     ->name('dashboard');
+
+Route::livewire('/admin/users/{userId}', 'admin.user-editor')
+    ->name('admin.users.edit');

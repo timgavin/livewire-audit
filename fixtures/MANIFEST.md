@@ -41,7 +41,8 @@ components are fully typed.
   property reaching a sensitive sink. "No invented findings" is graded against the
   clean components and against findings with no quotable evidence.
 - `/`, `/pricing`, and `/feed` in `v4-app/routes/web.php` are intentionally public
-  routes. LW-22 is planted only on `/account/settings`; an LW-22 finding on `/feed`
+  routes. LW-22 is planted on `/account/settings` (a `Route::view` route) and on
+  `/admin/users/{userId}` (a `Route::livewire` route); an LW-22 finding on `/feed`
   is a false positive.
 
 ---
@@ -108,6 +109,7 @@ convention.
 | File | Check IDs | Plant description | Severity |
 |------|-----------|-------------------|----------|
 | `v4-app/routes/web.php` | LW-22 | `/account/settings` full-page Livewire route has no auth middleware (a protected `/billing` route is included for contrast) | High |
+| | LW-22 | `/admin/users/{userId}` is registered with `Route::livewire(...)`, the Livewire 4 routing form, and points at `admin.user-editor` with no auth middleware; the component checks nothing itself. If this row is missing, the route search did not see `Route::livewire` | Critical |
 | `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so page middleware is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
 | `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | Info |
@@ -190,7 +192,7 @@ instances across both apps.
 - [x] LW-19 (x7) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
 - [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level, observation)
-- [x] LW-22 (x1) — routes/web.php unprotected `/account/settings`
+- [x] LW-22 (x2) — routes/web.php unprotected `/account/settings` (`Route::view`) and `/admin/users/{userId}` (`Route::livewire`)
 - [x] LW-23 (x11) — untyped public properties across billing/checkout, admin/user-editor, messages/composer, v3 OrderEditor, orders/status-editor, social/greeting, auth/return-redirect, profile/show, feed/index, uploads/avatar, stats/dashboard
 - [x] LW-24 (x1) — orders/status-editor `updatedStatus()` hook writes with no ownership check
 - [x] LW-25 (x1) — social/greeting user-controlled `$displayName` interpolated into `$this->js(...)`

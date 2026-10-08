@@ -810,15 +810,16 @@ Severity guidance: Critical when a guest-reachable full-page component exposes o
 data requiring auth/ownership with no in-component check either; High when auth is the only
 missing layer but the component checks ownership internally; Medium for lesser exposure.
 
-Look for: `Route::get(...)` (or `Volt::route`) pointing at a Livewire full-page component
-that should require authentication/authorization but whose route carries no `auth` (or
-appropriate) middleware — and whose `mount()`/actions do not compensate with their own
-checks. Cross-reference route definitions against each full-page component.
+Look for: `Route::livewire(...)`, `Route::get(...)` (or `Volt::route`) pointing at a Livewire
+full-page component that should require authentication/authorization but whose route carries
+no `auth` (or appropriate) middleware — and whose `mount()`/actions do not compensate with
+their own checks. Cross-reference route definitions against each full-page component.
 
 ```php
 // routes/web.php
 Route::get('/admin/users', AdminUsers::class);   // no ->middleware('auth'),
 // and AdminUsers::mount() does no Gate check -> guests reach an admin panel
+Route::livewire('/admin/users', 'pages::admin.users');   // the v4 form, same gap
 ```
 
 Why exploitable: the attacker simply navigates to `/admin/users` as a guest; with no
@@ -827,7 +828,13 @@ full-page component renders its protected content and exposes its actions to any
 tampering needed, the page is just open.
 
 Version notes: identical in v3 and v4. v4 adds single-file/multi-file full-page components,
-so check those route targets too, not only class-based components.
+so check those route targets too, not only class-based components. v4 registers a full-page
+component with `Route::livewire($uri, $component)`, where `$component` is a class or a
+component name; the 4.x upgrade guide ("Routing changes") calls it the preferred form and
+says single-file and multi-file components require it, while `Route::get($uri,
+Component::class)` "still works" for class-based ones. The macro is a `Route::get` to
+Livewire's page controller and returns the route, so `->middleware(...)` chains on it like
+any other route (verified, src/Mechanisms/HandleRouting/HandleRouting.php).
 
 Fix: see fixes.md "protect-component-routes"
 
