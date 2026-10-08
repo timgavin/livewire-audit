@@ -14,8 +14,8 @@ the file, it is not a finding.
 Every finding MUST include: **file and line** (absolute path, line of the offending
 code); **check ID** (`LW-NN`); **severity** (per the scale and per-check guidance);
 **evidence quote** (the actual offending code, copied exactly, not paraphrased);
-**exploit scenario** (one concrete sentence — what the attacker types, e.g.
-`$wire.set('amount', 0)`, and what they gain); **fix pattern** (the `fixes.md` name in the
+**impact** (one sentence — what a user could change or see, e.g. "any signed-in user can
+set the order total to zero"; no attack steps or payloads); **fix pattern** (the `fixes.md` name in the
 check entry).
 
 When you cannot be certain a finding is real — authorization might live in a trait you

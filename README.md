@@ -7,8 +7,8 @@ public method is callable from devtools whether or not your UI references it, an
 scalar you put on a public property is readable in page source.
 
 The skill runs a full audit of every component in your app — no sampling — and produces a
-severity-ranked report where every finding carries quoted evidence, a concrete exploit
-scenario, and a specific fix. Every component form is inventoried: class-based, v4
+severity-ranked report (see [Sample output](#sample-output) for what a finding looks
+like). Every component form is inventoried: class-based, v4
 single-file and multi-file, and Volt (functional API, class API, and inline `@volt`
 fragments). Findings are verified twice before they reach the report:
 audit subagents flag candidates, then the main session re-reads every flagged line and
@@ -141,17 +141,17 @@ Livewire version: v4 | Components audited: 9 | Findings: 17 (C/H/M/L/I: 5/4/3/3/
 ### [LW-08] Live secrets (Stripe secret key, DB host) serialized into the page snapshot - resources/views/components/profile/⚡show.blade.php:22-27
 Evidence: `'stripe_key' => config('services.stripe.secret'),` assigned to the public
 array property `public $debugInfo = [];`
-Exploit: `$debugInfo` is a plain PHP array, so it serializes in full into the
-`wire:snapshot` attribute in the page HTML. Anyone who loads the page and view-sources
-it reads the live Stripe secret key in plaintext.
+Impact: `$debugInfo` is a plain PHP array, so it serializes in full into the
+`wire:snapshot` attribute in the page HTML; anyone who loads the page can read the live
+Stripe secret key.
 Fix: fixes.md "computed-instead-of-public" - debug config values must never sit on a
 client-serialized property.
 
 ### [LW-16] SQL injection via #[Url] filter interpolated into whereRaw - resources/views/components/feed/⚡index.blade.php:15
 Evidence: `->whereRaw("category = '$this->filter'")`
-Exploit: `$filter` is hydrated straight from the `?filter=` query string and
-interpolated unbound into raw SQL. `/feed?filter=' OR '1'='1` controls the query, and
-the route has no auth middleware, so this is reachable unauthenticated.
+Impact: `$filter` is hydrated straight from the `?filter=` query string and
+interpolated unbound into raw SQL, and the route has no auth middleware, so anyone,
+signed in or not, can rewrite the query.
 Fix: fixes.md "bind-not-interpolate" - bound where() plus an allowlist on $filter.
 
 ...

@@ -87,7 +87,7 @@ Dispatch read-only Explore-type subagents in **batches of 5-10 components** (cou
 - the checklist. Preferred: give the subagent the ABSOLUTE PATH to `references/checklist.md` and require it to read the ENTIRE file (all LW checks) before auditing — subagents have Read access, and this keeps prompts small. Alternatively paste the full text verbatim. Either way: NEVER summarize, condense, or excerpt the checklist — condensation is how checks get silently dropped (it has caused real missed findings). Shrink the batch before you shrink the checklist;
 - the detected Livewire version, and whether Volt is installed;
 - the batch's file paths (class + view + any `.js`);
-- the required findings shape: `file`, `line`, `checkId` (LW-NN), `severity` (Critical/High/Medium/Low/Info), `evidence` (a quoted line from the file), `exploit` (a concrete attacker scenario).
+- the required findings shape: `file`, `line`, `checkId` (LW-NN), `severity` (Critical/High/Medium/Low/Info), `evidence` (a quoted line from the file), `impact` (one sentence: what a user could change or see; no attack steps).
 
 Tell each subagent:
 
@@ -137,13 +137,13 @@ Livewire version: <x> | Components audited: <n> | Findings: <n> (C/H/M/L/I: ...)
 ## Critical
 ### [LW-NN] <title> - <file>:<line>
 Evidence: `<quoted code>`
-Exploit: <concrete attacker steps>
+Impact: <what a user could change or see, in one sentence>
 Fix: <specific change, referencing the fixes.md pattern>
 
 ## High
 ### [LW-NN] <title> - <file>:<line>
 Evidence: `<quoted code>`
-Exploit: <concrete attacker steps>
+Impact: <what a user could change or see, in one sentence>
 Fix: <specific change, referencing the fixes.md pattern>
 
 ## Medium
