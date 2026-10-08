@@ -9,8 +9,9 @@ Laravel Livewire (v3 and v4) apps for client-facing security problems, plus a gr
 used to test that audit. The deliverable is the `skills/livewire-audit/` folder; everything else
 supports building and verifying it.
 
-There is no build, lint, or test runner — the content is Markdown (skill + references) and PHP/Blade
-fixture files that are read, never executed here. The fixtures' `composer.json` files declare a
+There is no build or lint step, and the only test runner is Claude Code's built-in
+`claude plugin eval` (see "How you test a change" below) — the content is Markdown (skill +
+references) and PHP/Blade fixture files that are read, never executed here. The fixtures' `composer.json` files declare a
 Laravel/Livewire app but there is no `vendor/`, no `artisan`, and they are not meant to boot.
 
 ## Two halves and how they relate
@@ -34,9 +35,26 @@ Laravel/Livewire app but there is no `vendor/`, no `artisan`, and they are not m
 - `fixtures/MANIFEST.md` is **ground truth**: it maps every file to the check IDs it plants, with a
   one-line description and expected severity, and lists which components must come back clean.
 
-**How you "test" a change:** run the skill against `fixtures/v4-app` and `fixtures/v3-app` and grade
-the resulting report against `MANIFEST.md` — every planted finding caught, every clean component left
-clean, no invented findings.
+**How you "test" a change:** from the repo root, run the working-tree skill on a fresh copy of each
+fixture app:
+
+```
+claude plugin eval . --runs 1 --ablation none --scaffold --allow-tools Bash Write --keep-temp --no-publish
+```
+
+The two cases under `evals/` each copy one fixture app into an empty temporary folder and audit it
+in a separate session that loads this plugin from the working tree and nothing else — not this
+file, not your own instructions, not the installed plugin. (Never run the skill inside `fixtures/`,
+and never test through `/livewire-audit:livewire-audit`: that is the installed plugin, not your
+edits.) The command's own pass/fail only says each run was valid: the skill fired, the report was
+the only file written, and neither `MANIFEST.md` nor this file was opened. The grade is a read:
+open each run's report and grade it against `MANIFEST.md` — every planted finding caught, every
+clean component left clean, no invented findings. A report is `livewire-audit-<date>.md` under
+`sealed/home/cwd/` in the folder the command prints as `kept temp` (run the `chmod` it prints
+first); delete the kept folders when you are done. One run of both apps took about four minutes
+and $2.50 at list price on Opus 5.5 (2026-10). A single run is noisy and results move with the
+model, so rerun before calling a lost finding a regression, and compare grades only between runs
+on the same model (`--model`).
 
 ## Cross-file contracts — the things that silently break
 
