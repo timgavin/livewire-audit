@@ -16,6 +16,10 @@ so the audit tool is graded against the right file:
 
 - **LW-12** (no `Relation::enforceMorphMap` / morphMap registration) — app-level,
   planted by its absence in `v4-app/app/Providers/AppServiceProvider.php`.
+- **LW-14** (default global upload rule) — app-level, planted in
+  `v4-app/config/livewire.php`: `temporary_file_upload.rules` is `null`, so the
+  temporary-upload endpoint takes any file type up to 12 MB, and the app has an upload
+  component. The component's own missing rule is a separate row.
 - **LW-20** (no `Livewire::addPersistentMiddleware(...)`) — app-level, planted by
   its absence in `v4-app/app/Providers/AppServiceProvider.php`.
 - **LW-21** (no `Livewire::setUpdateRoute(...)` hardened with middleware) —
@@ -37,6 +41,15 @@ components are fully typed.
   same fix may merge into one report block, and a merged block satisfies every check
   ID it names. Rows below marked `LW-02 + LW-04` are one such block (checklist LW-04
   says to tag both on a mount-set scalar).
+- The Severity column is a guide to the intended tier, not a graded expectation. A run
+  passes or fails on what it found, not on the tier it chose.
+- Expected inventory: v4-app has 15 components (14 single-file, 1 multi-file) and 6
+  full-page component routes; v3-app has 4 components (2 class-based, 1 Volt functional
+  page, 1 inline `@volt` fragment) and no routes.
+- `profile/show` copies the signed-in user's own email into `public string $email` and
+  renders it. Checklist LW-09 excludes the user's own data that the page shows or lets
+  them edit, so that is not a finding. The same goes for the bound fields of
+  `settings/notifications` and of the v3 `dashboard` fragment.
 - Secondary check IDs that legitimately co-fire on an already-vulnerable component
   are correct, not invented, when they are consistent with checklist.md — e.g. LW-03
   on `profile/show`'s never-rendered `$apiKeys`, or LW-04 on any client-writable
@@ -72,9 +85,8 @@ convention.
 | | LW-02 + LW-04 | untyped, unlocked `public $userId` used in queries — mount-set, reachable via `$wire.set()` (one block, fix lock-scalar) | High |
 | | LW-19 | `save()` passes `$this->all()` to `update()` with no validation | High |
 | | LW-23 | untyped public properties | High |
-| `v4-app/resources/views/components/profile/⚡show.blade.php` | LW-08 | `public $apiKeys` holds secrets copied from the model, serialized to the browser | Critical |
+| `v4-app/resources/views/components/profile/⚡show.blade.php` | LW-08 + LW-09 | `public $apiKeys` holds secrets copied from the model (`$user->api_keys`) and never rendered, so they are serialized to the browser (one block: removing the property fixes both) | Critical |
 | | LW-08 | `public $debugInfo` array embeds `config('services.stripe.secret')` — secret serialized into `wire:snapshot` | Critical |
-| | LW-09 | `public string $email` PII copied into component state | Medium |
 | | LW-03 | `public $debugInfo` holds internal config (db host, stripe secret) and is never rendered | High |
 | | LW-19 | `updateDisplayName()` persists `$displayName` with no validation | Medium |
 | | LW-23 | untyped public properties (`$apiKeys`, `$debugInfo`, `$displayName`) | Medium |
@@ -135,9 +147,10 @@ Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refun
 | | LW-22 | `/admin/users/{userId}` points at `admin.user-editor` with no auth middleware, and the component checks nothing itself | Critical |
 | `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so the custom `EnsureUserIsVerified` middleware on `/billing/{orderId}` (`v4-app/routes/web.php`) is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
+| `v4-app/config/livewire.php` | LW-14 | `'rules' => null` under `temporary_file_upload`: the default global rule (any file type, 12 MB) gates the temporary-upload endpoint for every component, whatever a property's own rule says | Medium |
 | `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | none: a line in the app-level section, not a finding |
 
-Supporting (non-planted) files: `v4-app/composer.json`, `v4-app/config/livewire.php`,
+Supporting (non-planted) files: `v4-app/composer.json`,
 `v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the custom middleware on the
 protected `/billing/{orderId}` route; it is what makes the LW-20 row fire).
 
@@ -183,6 +196,13 @@ An LW-23 finding on either Volt file is a false positive.
 |------|-----------------|
 | `v3-app/resources/views/dashboard.blade.php` | inline `@volt('account-alias')` fragment: `state(['accountId'])->locked()`, `Gate::authorize(...)` + `$this->validate(...)` in `$rename`, internal lookup helper wrapped in `protect()` |
 
+## v3-app — app-level checks (expected: no finding)
+
+`v3-app` deliberately has no `routes/`, `app/Providers/` or `config/` directory, so the
+five app-level checks produce no finding block there. The report's "App-level checks and
+run notes" section carries a line for each instead: LW-12, LW-20 and LW-22 `not
+applicable`, naming the missing directory; LW-14 and LW-21 `clean` or `not applicable`.
+
 Supporting (non-planted) files: `v3-app/composer.json` (declares `livewire/volt`, which
 arms the Volt discovery searches),
 `v3-app/resources/views/livewire/order-editor.blade.php`,
@@ -203,12 +223,12 @@ instances across both apps.
 - [x] LW-06 (x1) — feed/index `#[Url] $filter`
 - [x] LW-07 (x1) — admin/user-editor `makeAdmin()`
 - [x] LW-08 (x2) — profile/show `$apiKeys`; profile/show `$debugInfo` (embeds stripe secret in snapshot)
-- [x] LW-09 (x1) — profile/show `$email`
+- [x] LW-09 (x1) — profile/show `$apiKeys` (a model attribute copied into a public property and never rendered; merged with LW-08)
 - [x] LW-10 (x1) — stats/dashboard `billingSummary()` cache:true
 - [x] LW-11 (x1) — stats/dashboard `subscription()` persist:true
 - [x] LW-12 (x1) — AppServiceProvider missing morphMap (app-level)
 - [x] LW-13 (x1) — stats/dashboard `verifyCard()` addError echo
-- [x] LW-14 (x1) — uploads/avatar `$avatar` no validation
+- [x] LW-14 (x2) — uploads/avatar `$avatar` no validation; config/livewire.php default global upload rule (app-level)
 - [x] LW-15 (x2) — admin/user-editor `update($this->all())`; profile/bulk-update array-deep-write `update($this->data)`
 - [x] LW-16 (x1) — feed/index `whereRaw` interpolation
 - [x] LW-17 (x1) — feed/index `{!! $post->body !!}`
