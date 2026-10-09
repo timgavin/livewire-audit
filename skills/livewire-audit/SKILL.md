@@ -203,7 +203,7 @@ For each confirmed finding from Critical down to Low, in severity order (Info fi
 
 If a fix requires a product decision (which authorization policy applies, what the valid value set for a property is, whether an action should be reachable at all), do NOT guess. Edit nothing for that finding, record it as `needs-decision` with the question, and go on to the next finding. Ask the user the collected questions at the end.
 
-Finish with a summary table:
+Always finish with this summary table, one row per finding, so every `pass`, `fail` and `needs-decision` is on record. A prose summary may follow it; it never replaces it:
 
 ```
 | Finding | Fix applied | Re-check result |
