@@ -1,6 +1,6 @@
 # Livewire Security Fixes — Canonical Patterns
 
-Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > visibility change > `#[Computed]` conversion > authorization insertion > restructure. Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, leave that finding unfixed and ask the user — never guess an authorization rule.
+Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > making a method protected > `#[Computed]` conversion > authorization insertion > restructure. Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, leave that finding unfixed and ask the user — never guess an authorization rule.
 
 Each pattern below is referenced by name from `checklist.md`. The names are a fixed interface; do not rename them.
 
@@ -82,9 +82,9 @@ public function delete(): void
 }
 ```
 
-Visibility variant — every public method is client-callable with no `wire:` directive referencing it. Change `public function recalculate()` to `protected function recalculate()` for helpers that must not be client-callable.
+Make-protected variant — every public method is client-callable with no `wire:` directive referencing it. Change `public function recalculate()` to `protected function recalculate()` for helpers that must not be client-callable.
 
-Volt functional API: `$this->authorize(...)` works inside action closures (`Livewire\Volt\Component` extends `Livewire\Component`, and `$this` in a closure is the component). The visibility variant is `protect()`: `$helper = protect(function () { ... });` makes the closure callable from other actions via `$this->helper()` but not from the client (Volt docs).
+Volt functional API: `$this->authorize(...)` works inside action closures (`Livewire\Volt\Component` extends `Livewire\Component`, and `$this` in a closure is the component). The make-protected variant is `protect()`: `$helper = protect(function () { ... });` makes the closure callable from other actions via `$this->helper()` but not from the client (Volt docs).
 
 NOT: do not invent the policy ability or gate name — if the correct rule is not obvious from existing policies, leave the finding unfixed and ask.
 
@@ -186,7 +186,7 @@ public $avatar;
 
 Two layers, do BOTH:
 - The `#[Validate]` rule runs on the component's validate/update cycle — it gates what gets stored, but NOT the initial temporary-upload POST.
-- The temporary-upload endpoint (`livewire/upload-file`) is gated only by the GLOBAL `temporary_file_upload.rules` in `config/livewire.php`, whose default is `['required','file','max:12288']` — 12 MB and ANY MIME type. So an unconstrained app accepts any 12 MB file at the temp endpoint regardless of the property rule. Set a real global rule:
+- The temporary-upload endpoint (`livewire/upload-file`) is gated only by the GLOBAL `temporary_file_upload.rules` in `config/livewire.php`, whose default is `['required','file','max:12288']` (verified, src/Features/SupportFileUploads/FileUploadConfiguration.php) — 12 MB and ANY MIME type. So an unconstrained app accepts any 12 MB file at the temp endpoint regardless of the property rule. Set a real global rule:
 
 ```php
 // config/livewire.php
@@ -282,7 +282,7 @@ When to use (LW-10, LW-11): a `#[Computed]` holding user-scoped data uses `cache
 public function balance(): string { ... }
 ```
 
-NOT: do not use `cache: true` for per-user data — it is keyed by component name and shared application-wide (in the Laravel cache backend) across every user and request, so it leaks across users.
+NOT: do not use `cache: true` for per-user data — it is keyed by component name and shared application-wide (in the Laravel cache backend) across every user and request, so it leaks across users (verified, src/Features/SupportComputed/BaseComputed.php: the key is `lw_computed.<component name>.<method>`; a `persist:` key uses the component id instead).
 
 ---
 
