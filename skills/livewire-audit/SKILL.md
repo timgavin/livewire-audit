@@ -16,7 +16,7 @@ This is a defensive audit of the user's own application, run at the owner's requ
 ## Modes
 
 - **No args (default): read-only audit.** Make no changes to application code. The only file you write is the report at `livewire-audit-YYYY-MM-DD.md` (today's date) in the target project's root directory.
-- **`--fix`: audit then remediate.** Run or refresh the audit, then apply fixes for confirmed findings only. Never commit. Never weaken or remove validation rules. On any ambiguous authorization decision (which policy applies, who is allowed to call an action), leave that finding unfixed and ask the user instead of guessing.
+- **`--fix`: audit then remediate.** Run the audit (Steps A to F), then apply fixes for confirmed findings only. Never commit. Never weaken or remove validation rules. On any ambiguous authorization decision (which policy applies, who is allowed to call an action), leave that finding unfixed and ask the user instead of guessing.
 
 Across both modes: **never run git commands.** No `git add`, `commit`, `stash`, `checkout`, or `push`. Leave all changes uncommitted for the user to review.
 
@@ -27,12 +27,12 @@ Confirm Livewire is installed and read its config. Run:
 ```
 grep -o '"livewire/livewire"[^,}]*' composer.json
 grep -o '"livewire/volt"[^,}]*' composer.json
-ls config/livewire.php 2>/dev/null && grep -nE "component_locations|class_namespace|view_path" config/livewire.php
+ls config/livewire.php 2>/dev/null && grep -nE "component_locations|component_namespaces|class_namespace|class_path|view_path" config/livewire.php
 ```
 
 If `livewire/livewire` is absent from `composer.json`, tell the user this is not a Livewire app and stop. Note whether `livewire/volt` is present — Volt runs on both major versions (its composer constraint is `livewire/livewire: ^3.6.1|^4.0`) and adds component forms with their own discovery searches in Step B. If `config/livewire.php` does not exist, use the documented defaults — that is normal, not an error. A directory a later step greps (`routes/`, `app/Providers/`) that does not exist makes its checks not-applicable; record that in the report rather than failing.
 
-Note the major version (v3 vs v4) — it determines the v3-vs-v4 notes in the checklist, though the security model is substantively identical. Record `component_locations`, `class_namespace`, and `view_path` if they deviate from defaults (`resources/views/components`, `App\Livewire`, `resources/views/livewire`); later steps honor the configured values.
+Note the major version (v3 vs v4) — it determines the v3-vs-v4 notes in the checklist, though the security model is substantively identical. Record `component_locations`, `component_namespaces`, `class_namespace`, `class_path` and `view_path` if they deviate from defaults (`resources/views/components` and `resources/views/livewire`; `pages` and `layouts` under `resources/views/`; `App\Livewire`; `app/Livewire`; `resources/views/livewire`). Step B searches a configured directory as well as the defaults.
 
 ## Step B: Build the component inventory
 
@@ -44,7 +44,7 @@ Every component gets audited. No sampling. Enumerate all four forms.
 find app/Livewire app/Http/Livewire -name '*.php' 2>/dev/null
 ```
 
-Match each class to its view via `view_path` (default `resources/views/livewire`).
+If Step A recorded a `class_path`, or a `class_namespace` other than `App\Livewire`, search that directory too (a namespace maps to its PSR-4 directory: `App\Http\Components` is `app/Http/Components`). Match each class to its view via `view_path` (default `resources/views/livewire`).
 
 **v4 single-file and multi-file components.** The discovery marker is the embedded anonymous class block, NOT the filename prefix. The ⚡ (U+26A1, high-voltage) glyph prefix is purely cosmetic and not load-bearing — an un-prefixed file is equally valid. The real gate is content matching `<?php ... new ... class`:
 
@@ -54,11 +54,11 @@ grep -rl --include='*.php' 'extends Component' resources/views/ 2>/dev/null
 find resources/views -name '*⚡*' 2>/dev/null
 ```
 
-Union the results of all three. The engine's own gate is the regex `<?php ... new ... class` (`new`, then `class`, with anything between), so the first grep matches `new class`, `new #[Layout(...)] class`, and attribute-decorated anonymous classes a literal `'new class'` search would miss; the second catches components extending a custom base; the find catches prefixed files whose PHP block a grep might miss. Open any candidate and confirm it contains a `new ... class extends ...Component` block before counting it.
+Union the results of all three. The engine's own gate is the regex `<?php ... new ... class` (`new`, then `class`, with anything between), so the first grep matches `new class`, `new #[Layout(...)] class`, and attribute-decorated anonymous classes a literal `'new class'` search would miss; the second catches a class whose `new` and `class` sit on different lines (an attribute on a line of its own between them), which a line-based grep for the first pattern misses; the find catches prefixed files whose PHP block a grep might miss. Open any candidate and confirm it contains a `new ... class extends ...Component` block before counting it.
 
 A multi-file component is a directory holding `<name>.php` (the class, a plain PHP file, not Blade) and `<name>.blade.php` (the template), plus optional `<name>.js` and `.css`; the ⚡, when used, is on the directory (verified, src/Finder/Finder.php: that pair of files is all the engine requires, with or without the prefix). That is why the greps run over `*.php`, which also matches `*.blade.php`: with the prefix turned off (`make_command.emoji` set to `false`), the class file is the only marker a multi-file component has. Count the directory as one component and include its sibling `.php`, `.blade.php`, and `.js` files in the audited set.
 
-Honor any configured `component_locations` from `config/livewire.php` if it deviates from `resources/views/components`.
+The searches above cover everything under `resources/views/`. If Step A recorded a `component_locations` or `component_namespaces` directory outside that tree, run them against it as well.
 
 **Volt components (only when Step A found `livewire/volt`).** Volt adds two forms none of the searches above can see: functional-API files (`use function Livewire\Volt\{state};` — no class, no `extends`, no ⚡) and inline `@volt('name') ... @endvolt` fragments embedded in ordinary Blade views. Volt's class API (`new class extends Component` importing `Livewire\Volt\Component`) is already caught by the anonymous-class and `extends Component` greps above.
 
@@ -106,11 +106,12 @@ Nothing unverified reaches the report. Check coverage first: every component you
 
 - **Re-read** the flagged file at the flagged location in the main conversation.
 - Confirm the quoted evidence actually exists at that location and the vulnerability logic holds.
+- For a candidate marked `needs main-thread confirmation`, the open question is usually somewhere other than the flagged line. Read what the subagent said it could not see (a trait, a base class, a policy or middleware applied upstream, the parent component) and settle it. If the code that would settle it is not in the project, the candidate is not confirmed: discard it and say why.
 - Discard false positives. Keep a running count of how many you discarded.
 
 Then run the **app-level checks** in the main thread (these span the whole app, not one component, so subagents cannot own them):
 
-- **LW-12** — morph map / model alias registration in service providers (search `app/Providers/` for `enforceMorphMap`, `morphMap`, `Relation::morphMap`).
+- **LW-12** — morph map / model alias registration in service providers (search `app/Providers/` for `enforceMorphMap`, `morphMap`, `Relation::morphMap`). The subagents' notes on which components hold Eloquent models tell you which class names are exposed.
 - **LW-14** — global upload rules in `config/livewire.php` (`temporary_file_upload` rules / max size / mimes).
 - **LW-20** — `Livewire::addPersistentMiddleware(...)` registration in providers.
 - **LW-21** — `Livewire::setUpdateRoute(...)` (custom update endpoint and its middleware).
@@ -209,6 +210,6 @@ Finish with a summary table:
 
 ## Reminders
 
-- Read-only mode writes exactly one file (the report). Fix mode additionally edits flagged source files. Nothing else.
-- Always end your reply by stating the exact path of the report you wrote (`livewire-audit-YYYY-MM-DD.md` in the project root), so the user knows where to find it.
+- Read-only mode writes exactly one file (the report). Fix mode additionally edits flagged source files. Nothing else. A run that stops in Step A or B (not a Livewire app, no components) writes no file.
+- When you wrote a report, always end your reply by stating its exact path (`livewire-audit-YYYY-MM-DD.md` in the project root), so the user knows where to find it.
 - Never run git commands at any point. Leave all work uncommitted.
