@@ -63,7 +63,7 @@ convention.
 | `v4-app/resources/views/components/billing/⚡checkout.blade.php` | LW-01 | `pay()` charges money with no authorization / ownership check | Critical |
 | | LW-02 + LW-04 | untyped, unlocked `public $amount` and `public $orderId` tamperable from the client — mount-set, reachable via `$wire.set()`, drive the charge (one block, fix lock-scalar) | Critical |
 | | LW-18 | `pay()` charges a payment gateway with no rate limiting / throttle | High |
-| | LW-19 | `pay()` persists `charged_amount`/`note` with no validation | High |
+| | LW-19 | `pay()` persists `charged_amount` and sends `note` to the payment gateway with no validation | High |
 | | LW-23 | untyped public properties | High |
 | `v4-app/resources/views/components/admin/⚡user-editor.blade.php` | LW-01 | `save()` and `makeAdmin()` mutate a client-tamperable `$userId`'s account (`makeAdmin()` sets `role='admin'`) with no authorization / ownership check | Critical |
 | | LW-15 | `save()` does `$user->update($this->all())` — full mass-assignment from component state | Critical |
@@ -87,7 +87,7 @@ convention.
 | | LW-19 | recipient validated with only `['required']` — no existence/integer/ownership rule | Medium |
 | | LW-23 | untyped public `$recipientId` and `$body` | High |
 | `v4-app/resources/views/components/stats/⚡dashboard.blade.php` | LW-10 | `#[Computed(cache: true)]` account summary not keyed by user — cross-user cache bleed | High |
-| | LW-11 | `#[Computed(persist: true, seconds: 86400)]` subscription persisted per-day, same bleed risk | High |
+| | LW-11 | `#[Computed(persist: true, seconds: 86400)]` keeps the subscription in the cache for a day — sensitive data held far longer than needed (persist is keyed per component instance, so this is not the cross-user bleed of the LW-10 row) | High |
 | | LW-13 | `addError()` echoes the submitted card number back into the message | High |
 | | LW-23 | untyped public `$cardNumber` | Low |
 | `v4-app/resources/views/components/uploads/⚡avatar.blade.php` | LW-14 | `WithFileUploads` `public $avatar` with no `#[Validate]` and no validation in `save()` | High |
@@ -132,13 +132,13 @@ Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refun
 |------|-----------|-------------------|----------|
 | `v4-app/routes/web.php` | LW-22 | `/account/settings` full-page Livewire route has no auth middleware (a protected `/billing` route is included for contrast) | High |
 | | LW-22 | `/admin/users/{userId}` is registered with `Route::livewire(...)`, the Livewire 4 routing form, and points at `admin.user-editor` with no auth middleware; the component checks nothing itself. If this row is missing, the route search did not see `Route::livewire` | Critical |
-| `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so page middleware is not re-applied to component update requests | High |
+| `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so the custom `EnsureUserIsVerified` middleware on `/billing` (`v4-app/routes/web.php`) is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
 | `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | none: a line in the app-level section, not a finding |
 
 Supporting (non-planted) files: `v4-app/composer.json`, `v4-app/config/livewire.php`,
-`v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the middleware referenced by
-the protected route).
+`v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the custom middleware on the
+protected `/billing` route; it is what makes the LW-20 row fire).
 
 ---
 
@@ -160,9 +160,10 @@ the protected route).
 ## v3-app — Volt functional components
 
 `v3-app/composer.json` declares `livewire/volt`, so Step B's Volt discovery searches must
-fire for this app. Neither file below contains `extends Component`, an anonymous
-`new ... class` block, or a ⚡ filename — if either is missing from the audited inventory,
-the discovery union failed. This is a coverage plant as much as a vulnerability plant.
+fire for this app. Neither Volt file (the one in the table below and the clean inline
+fragment in the next section) contains `extends Component`, an anonymous `new ... class`
+block, or a ⚡ filename — if either is missing from the audited inventory, the discovery
+union failed. This is a coverage plant as much as a vulnerability plant.
 
 | File | Check IDs | Plant description | Severity |
 |------|-----------|-------------------|----------|

@@ -97,14 +97,18 @@ how you installed it:
 - Manual install: `/livewire-audit`
 - Either way, plain language works too: "audit my Livewire app"
 
-The read-only audit writes a report to `livewire-audit-<date>.md` in the project root.
-Append `--fix` to apply fixes for confirmed findings instead of only reporting them — e.g.
-`/livewire-audit:livewire-audit --fix`.
+The read-only audit writes a report to `livewire-audit-<date>.md` in the project root. It
+makes no changes to your code and runs no migrations or seeders. If your app happens to be
+runnable, it will additionally pull a real rendered page and confirm snapshot-exposure
+findings against the actual `wire:snapshot` payload; if not, the report says that step was
+skipped.
 
-The audit makes no changes to your code and runs no migrations or seeders. If your app
-happens to be runnable, it will additionally pull a real rendered page and confirm
-snapshot-exposure findings against the actual `wire:snapshot` payload; if not, the report
-says that step was skipped.
+Append `--fix` to apply fixes for confirmed findings instead of only reporting them — e.g.
+`/livewire-audit:livewire-audit --fix`. Fix mode applies the smallest sufficient fix per
+finding (`#[Locked]` before visibility changes before restructuring), never weakens
+validation, never commits, and refuses to guess authorization rules — if a fix needs a
+product decision like "which policy applies here," it collects the question for you instead
+of inventing an answer.
 
 ## Other agents
 
@@ -121,11 +125,6 @@ that verification stage — a degraded run. The checklist, snapshot internals, a
 patterns themselves are pure Livewire/PHP knowledge and carry over unchanged. I have not
 tested the skill on Codex, Copilot CLI, or Gemini CLI, so treat it as format-compatible
 there, not verified.
-
-Fix mode applies the smallest sufficient fix per finding (`#[Locked]` before visibility
-changes before restructuring), never weakens validation, never commits, and refuses to
-guess authorization rules — if a fix needs a product decision like "which policy applies
-here," it collects the question for you instead of inventing an answer.
 
 ## Sample output
 

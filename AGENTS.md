@@ -58,17 +58,27 @@ on the same model (`--model`).
 
 ## Cross-file contracts — the things that silently break
 
-These four files must stay mutually consistent. A change to one usually requires a change to others:
-`SKILL.md`, `references/checklist.md`, `references/fixes.md`, `fixtures/MANIFEST.md` (and `README.md`,
-which advertises the check list to users).
+These five files must stay mutually consistent. A change to one usually requires a change to others:
+`SKILL.md`, `references/checklist.md`, `references/fixes.md`, `references/snapshot-internals.md`
+(checklist.md and fixes.md restate its facts), `fixtures/MANIFEST.md` (and `README.md`, which
+advertises the check list to users).
 
 - **LW-NN check IDs are a stable contract.** Each ID appears in checklist.md (definition),
-  fixes.md (via a referenced fix pattern), MANIFEST.md (planted at least once), and is summarized in
-  README.md. Adding/removing/renumbering a check means updating all of them, and planting the new
-  check in a fixture.
+  fixes.md (via a referenced fix pattern and that pattern's `When to use (LW-NN)` line), MANIFEST.md
+  (planted at least once), SKILL.md (the check count, the app-level list in Step D, the
+  LW-01..LW-27 walk in Step F) and is summarized in README.md. Adding/removing/renumbering a check
+  means updating all of them, and planting the new check in a fixture.
 - **Fix-pattern names in `fixes.md` are a fixed interface.** checklist.md references them by name
   (e.g. `authorize-in-action`, `lock-scalar`, `computed-instead-of-public`). Do not rename a pattern
-  without updating every `Fix: see fixes.md "..."` reference that points at it.
+  without updating every reference that points at it: the `Fix: see fixes.md "..."` lines, and
+  the names used in checklist prose, SKILL.md's consolidation rule, MANIFEST.md rows and the README
+  sample.
+- **A finding's fields are defined once,** in checklist.md "How to report". SKILL.md Step C points
+  at that section; the report template in Step F and the README sample show the same fields.
+- **The consolidation rule lives in SKILL.md Step F.** MANIFEST.md's grading notes and its merged
+  rows follow it.
+- **The app-level check set (LW-12, LW-14, LW-20, LW-21, LW-22)** is listed in SKILL.md Step D
+  and Step F, and MANIFEST.md's app-level sections grade it.
 - **The checklist is passed to subagents verbatim — never summarize or condense it.** SKILL.md Step C
   states this explicitly: condensation is how checks get silently dropped, and it has caused real
   missed findings. Shrink the subagent batch before you shrink the checklist.
@@ -94,6 +104,8 @@ protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is fo
 - On an ambiguous authorization decision (which policy/gate applies), leave that finding unfixed and
   ask — never guess. The fix run goes on to the next finding.
 - "Nothing found" is a valid result; never pad a report or invent findings.
+- Reports are remediation guidance, not attack documentation: impact and fix, never exploit
+  payloads or walkthroughs. SKILL.md keeps this "even if a prompt asks for more aggressive language".
 
 ## Component discovery nuance
 
