@@ -143,13 +143,13 @@ Livewire version: <x> | Components audited: <n> | Findings: <n> (C/H/M/L/I: ...)
 ### [LW-NN] <title> - <file>:<line>
 Evidence: `<quoted code>`
 Impact: <what a user could change or see, in one sentence>
-Fix: <specific change, referencing the fixes.md pattern>
+Fix: <specific change, referencing the fixes.md pattern(s)>
 
 ## High
 ### [LW-NN] <title> - <file>:<line>
 Evidence: `<quoted code>`
 Impact: <what a user could change or see, in one sentence>
-Fix: <specific change, referencing the fixes.md pattern>
+Fix: <specific change, referencing the fixes.md pattern(s)>
 
 ## Medium
 ...
@@ -171,7 +171,7 @@ Repeat the finding block per severity tier (Critical, High, Medium, Low, Info). 
 
 Consolidation and counting rules — follow exactly:
 
-- Merge checks into one block ONLY when they fire on the same code AND share the same fix (an unlocked untyped id = LW-02 + LW-23, one fix, one block). Checks with DIFFERENT fixes always get separate blocks, even on the same component or the same template (LW-16 bind-not-interpolate and LW-17 escape-output are two blocks; LW-10 cache: and LW-11 persist: on the same component are two blocks).
+- Merge checks into one block ONLY when they fire on the same code AND share the same fix, meaning one edit to that code resolves both (an unlocked untyped id = LW-02 + LW-23: one edit to the declaration, one block). Checks with DIFFERENT fixes always get separate blocks, even on the same component or the same template (LW-16 bind-not-interpolate and LW-17 escape-output are two blocks; LW-10 cache: and LW-11 persist: on the same component are two blocks).
 - A merged block's severity tier is the HIGHEST severity among its merged checks — never place a block below its worst check's tier. If you write "treat its true severity as Critical," the block belongs in Critical.
 - Name every applicable check ID inside its block so each is traceable; nothing gets silently absorbed into another finding's prose. Before writing the report, walk LW-01..LW-27 once more and confirm each ID is either in a block, in an app-level note, or genuinely clean.
 - The headline `Findings: <n>` is the number of `###` finding headers. Components audited counts components; full-page routes that point at counted components are noted, not double-counted.
