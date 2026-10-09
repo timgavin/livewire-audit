@@ -1,7 +1,7 @@
 {
     "name": "livewire-audit-fixtures/v3-app",
     "type": "project",
-    "description": "Legacy admin tool still on the class-based Livewire 3 component format.",
+    "description": "Legacy admin tool on Livewire 3, part class-based components and part Volt.",
     "require": {
         "php": "^8.3",
         "laravel/framework": "^12.0",
