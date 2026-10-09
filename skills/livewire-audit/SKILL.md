@@ -81,7 +81,7 @@ grep -rnE "Volt::route\(" routes/
 
 Every `Route::livewire()` hit is a full-page component route: its second argument is a component class or a component name (`'admin.user-editor'`, or namespaced, `'pages::post.create'`). Cross-reference every `Route::view()` target against the component inventory — a `Route::view('/x', 'components.foo.bar')` that resolves to a Livewire component file IS a full-page component route and gets the same middleware scrutiny.
 
-State the total inventory count to the user (class-based + SFC/MFC + Volt + full-page routes). If the inventory is empty, say so and stop — do not audit non-Livewire code.
+State the inventory to the user as two counts: components (class-based + SFC/MFC + Volt), and the full-page routes that point at them. If there are no components, say so and stop — do not audit non-Livewire code.
 
 ## Step C: Fan out audit subagents
 
@@ -127,7 +127,7 @@ When runnable:
 - Fetch a page that renders an affected component.
 - Extract its `wire:snapshot` attribute from the HTML.
 - Confirm exposure findings against the real serialized payload.
-- Label each exposure finding `confirmed dynamically` or `statically inferred` accordingly.
+- Label each exposure finding `confirmed dynamically` or `statically inferred` at the end of its Evidence line. Label only when this step ran; when it was skipped, the report's `Dynamic verification: skipped` line says so once.
 
 See `references/snapshot-internals.md` for what the snapshot contains and how to read it.
 
@@ -160,6 +160,11 @@ Fix: <specific change, referencing the fixes.md pattern(s)>
 ## Info
 ...
 
+## App-level checks and run notes
+LW-NN: clean - <what you checked> | not applicable - <reason>
+Dynamic verification: skipped - <reason> | performed against <page>
+Full-page routes: <n> point at audited components
+
 ## Clean components
 <every component with zero findings, listed by name/path>
 
@@ -169,16 +174,18 @@ Fix: <specific change, referencing the fixes.md pattern(s)>
 
 Repeat the finding block per severity tier (Critical, High, Medium, Low, Info). Order findings within a tier by severity of impact.
 
+`## App-level checks and run notes` is where a result that is not a finding goes. Write one `LW-NN:` line for each main-thread check from Step D (LW-12, LW-14, LW-20, LW-21, LW-22) that has such a result: `clean` with what you checked (a default left in place, a route that is public by design), or `not applicable` with the reason (a missing `routes/` or `app/Providers/` directory). A check can have blocks above and a line here. A result that asks nothing of the owner is a line here, never an Info block. Then write the two fixed lines. Nothing else goes in this section, and none of its lines is a finding.
+
 Consolidation and counting rules — follow exactly:
 
 - Merge checks into one block ONLY when they fire on the same code AND share the same fix, meaning one edit to that code resolves both (an unlocked untyped id = LW-02 + LW-23: one edit to the declaration, one block). Checks with DIFFERENT fixes always get separate blocks, even on the same component or the same template (LW-16 bind-not-interpolate and LW-17 escape-output are two blocks; LW-10 cache: and LW-11 persist: on the same component are two blocks).
 - A merged block's severity tier is the HIGHEST severity among its merged checks — never place a block below its worst check's tier. If you write "treat its true severity as Critical," the block belongs in Critical.
-- Name every applicable check ID inside its block so each is traceable; nothing gets silently absorbed into another finding's prose. Before writing the report, walk LW-01..LW-27 once more and confirm each ID is either in a block, in an app-level note, or genuinely clean.
-- The headline `Findings: <n>` is the number of `###` finding headers. Components audited counts components; full-page routes that point at counted components are noted, not double-counted.
+- Name every applicable check ID inside its block so each is traceable; nothing gets silently absorbed into another finding's prose. Before writing the report, walk LW-01..LW-27 once more and confirm each ID is either in a block, on a line in the app-level section, or genuinely clean.
+- The headline `Findings: <n>` is the number of `###` finding headers; lines in the app-level section are not counted. `Components audited` counts components only; the full-page routes go on the `Full-page routes:` line.
 
 Write every `<file>` as its path from the project root; never shorten it or define a path convention of your own. Filenames containing the ⚡ prefix: write the literal character in the report. If your environment blocks emoji output, substitute the placeholder `[U+26A1]` and state that convention once at the top of the report.
 
-**"Nothing found" is a valid result.** If zero findings survive verification, say so plainly and list the audited inventory as evidence of coverage. Never pad the report or invent findings to justify the run.
+**"Nothing found" is a valid result.** If zero findings survive verification, say so plainly and list the audited inventory as evidence of coverage; the app-level section is still written. Never pad the report or invent findings to justify the run.
 
 After writing the report, end your reply by stating its exact path (`livewire-audit-YYYY-MM-DD.md` in the project root) so the user knows where to find it.
 

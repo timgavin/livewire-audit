@@ -776,9 +776,10 @@ Fix: see fixes.md "persistent-middleware"
 
 ## LW-21: Update route exposure
 
-Severity guidance: almost always Info — record that the update route was checked. Escalate
-to Low/Medium only for a genuinely odd customization (custom route on the wrong domain or
-prefix, or wrapped in an extra middleware group that changes the auth context).
+Severity guidance: almost always Info for a customized route. Escalate to Low/Medium only
+for a genuinely odd customization (custom route on the wrong domain or prefix, or wrapped in
+an extra middleware group that changes the auth context). An app that does not customize
+the route has no finding here.
 
 Look for: customizations to the Livewire update endpoint via `Livewire::setUpdateRoute(...)`.
 IMPORTANT — do NOT report "the custom route dropped `web` so CSRF/session is lost": that is
@@ -787,8 +788,9 @@ guard onto whatever route the callback returns, even if you omit them (verified,
 src/Mechanisms/HandleRequests/HandleRequests.php). So you cannot strip CSRF/session through
 this API. The only real findings are: the custom route placed on an unexpected domain/prefix,
 or behind additional middleware that alters authentication/authorization for update requests.
-If there is no `setUpdateRoute` call at all, the default is safe — report Info "default
-update route, no customization."
+If there is no `setUpdateRoute` call at all, the default is safe. That is a clean result,
+not a finding: the report records it as one line in its app-level section ("LW-21: clean -
+default update route, no customization").
 
 ```php
 // AppServiceProvider — a real (narrow) finding: custom route on a different host

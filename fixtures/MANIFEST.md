@@ -20,7 +20,9 @@ so the audit tool is graded against the right file:
   its absence in `v4-app/app/Providers/AppServiceProvider.php`.
 - **LW-21** (no `Livewire::setUpdateRoute(...)` hardened with middleware) —
   app-level **observation**, planted by its absence everywhere (no provider or
-  route config sets a custom hardened update route). Expected severity: Info.
+  route config sets a custom hardened update route). Expected: no finding block. The
+  report's "App-level checks and run notes" section carries one line saying the
+  default update route is in use.
 - **LW-22** (unprotected full-page Livewire component route) — app-level, planted
   in `v4-app/routes/web.php`.
 
@@ -40,6 +42,10 @@ components are fully typed.
   on `profile/show`'s never-rendered `$apiKeys`, or LW-04 on any client-writable
   property reaching a sensitive sink. "No invented findings" is graded against the
   clean components and against findings with no quotable evidence.
+- A check result that is not a finding (LW-21's default route; `/feed` being public by
+  design; a check that cannot run because v3-app has no `routes/` or `app/Providers/`)
+  belongs on a line in the report's "App-level checks and run notes" section. Written
+  as a `###` block in any tier, Info included, it is graded as an invented finding.
 - `/`, `/pricing`, and `/feed` in `v4-app/routes/web.php` are intentionally public
   routes. LW-22 is planted on `/account/settings` (a `Route::view` route) and on
   `/admin/users/{userId}` (a `Route::livewire` route); an LW-22 finding on `/feed`
@@ -128,7 +134,7 @@ Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refun
 | | LW-22 | `/admin/users/{userId}` is registered with `Route::livewire(...)`, the Livewire 4 routing form, and points at `admin.user-editor` with no auth middleware; the component checks nothing itself. If this row is missing, the route search did not see `Route::livewire` | Critical |
 | `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so page middleware is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
-| `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | Info |
+| `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | none: a line in the app-level section, not a finding |
 
 Supporting (non-planted) files: `v4-app/composer.json`, `v4-app/config/livewire.php`,
 `v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the middleware referenced by
@@ -207,7 +213,7 @@ instances across both apps.
 - [x] LW-18 (x3) — messages/composer `send()` no rate limit; billing/checkout `pay()` charges a card with no rate limit; v3 Volt gift-cards/redeem `$redeem` no rate limit on a brute-forceable financial action
 - [x] LW-19 (x7) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
-- [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level, observation)
+- [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level; recorded as a line in the report's app-level section, not a finding)
 - [x] LW-22 (x2) — routes/web.php unprotected `/account/settings` (`Route::view`) and `/admin/users/{userId}` (`Route::livewire`)
 - [x] LW-23 (x11) — untyped public properties across billing/checkout, admin/user-editor, messages/composer, v3 OrderEditor, orders/status-editor, social/greeting, auth/return-redirect, profile/show, feed/index, uploads/avatar, stats/dashboard
 - [x] LW-24 (x1) — orders/status-editor `updatedStatus()` hook writes with no ownership check

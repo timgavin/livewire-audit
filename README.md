@@ -103,8 +103,8 @@ Append `--fix` to apply fixes for confirmed findings instead of only reporting t
 
 The audit makes no changes to your code and runs no migrations or seeders. If your app
 happens to be runnable, it will additionally pull a real rendered page and confirm
-snapshot-exposure findings against the actual `wire:snapshot` payload; if not, those
-findings are labeled statically inferred.
+snapshot-exposure findings against the actual `wire:snapshot` payload; if not, the report
+says that step was skipped.
 
 ## Other agents
 
