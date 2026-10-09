@@ -19,7 +19,8 @@ and came back clean, not that the tool ran out of patience.
 
 27 checks across four surfaces. Every engine-behavior claim behind them was verified
 against the Livewire v4.3.0 source and the official 3.x/4.x docs, and is cited in the
-reference files.
+reference files. Where Livewire 3 behaves differently, that was checked against the
+v3.8.10 source.
 
 **Client tampering**
 - LW-01 every public action authorizes; parameters treated as untrusted input
@@ -119,10 +120,11 @@ Codex, Gemini CLI — can load it too; install it in that tool's skills director
 
 One caveat, stated plainly: the audit's accuracy comes from fanning the work out across
 parallel read-only subagents and then re-verifying every finding in the orchestrating
-context. That orchestration is written for Claude Code's subagent model. An agent without
-parallel subagent dispatch can still run the checks, but in a single context and without
-that verification stage — a degraded run. The checklist, snapshot internals, and fix
-patterns themselves are pure Livewire/PHP knowledge and carry over unchanged. I have not
+context. That orchestration is written for Claude Code's subagent model. The skill does not
+say what an agent without subagent dispatch should do instead, so there you get whatever
+that agent makes of the instructions, without the separate verification stage. The
+checklist, snapshot internals, and fix patterns are plain Livewire/PHP knowledge and are
+still useful as reference. I have not
 tested the skill on Codex, Copilot CLI, or Gemini CLI, so treat it as format-compatible
 there, not verified.
 
@@ -178,8 +180,11 @@ The reference files (`references/snapshot-internals.md`, `references/checklist.m
 claim — what serializes into snapshots, exactly what `#[Locked]` throws, how model-typed
 properties are protected (it is not `#[Locked]`, despite what the docs imply), what happens
 when a client sends a wrong-typed value, and which middleware actually re-runs on component
-updates. Verified against Livewire v4.3.0 and the official 3.x/4.x documentation. If you
-find a claim that is wrong for a newer Livewire version, please open an issue.
+updates. Verified against Livewire v4.3.0 and the official 3.x/4.x documentation. The two
+major versions are not identical: on Livewire 3, for one, a custom update route can lose
+CSRF protection, which Livewire 4 prevents. Differences like that were checked against the
+v3.8.10 source and are listed in `references/snapshot-internals.md`. If you find a claim
+that is wrong for a newer Livewire version, please open an issue.
 
 ## License
 

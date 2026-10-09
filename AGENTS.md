@@ -85,13 +85,19 @@ advertises the check list to users).
 - **Fixtures and MANIFEST.md move together.** If you add/remove/alter a planted vulnerability in a
   fixture, update MANIFEST.md's tables and the per-check coverage checklist at the bottom; if you add
   a check, plant it in a fixture and record it in MANIFEST.md.
+- **A change under `skills/` reaches users only with a version bump.** `version` in
+  `.claude-plugin/plugin.json` is what an installed copy updates on. Bump it in the commit or merge
+  that releases a skill change; never leave changed skill files under an old number.
 
 ## Engine-claim discipline
 
 Every engine-behavior claim (what serializes into snapshots, what `#[Locked]` throws, how
 model-typed properties are protected, which middleware re-runs on updates, what `setUpdateRoute`
 force-injects) is verified against **Livewire v4.3.0 source** and the official 3.x/4.x docs, and is
-cited in the reference files. Do not add or change a behavioral claim without a source citation —
+cited in the reference files. A statement that Livewire 3 behaves the same, or differently, is
+checked against the **v3.8.10 source**; `snapshot-internals.md` section 5 lists the differences
+found, and they are real (v3's `setUpdateRoute` does not force-add `web`). Do not write "identical
+in v3 and v4" without that check. Do not add or change a behavioral claim without a source citation —
 unverified claims are the one thing that destroys this skill's value. Several checklist notes exist
 specifically to correct plausible-but-wrong assumptions (e.g. model-typed properties are NOT
 protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is force-added).
