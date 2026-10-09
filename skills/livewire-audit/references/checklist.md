@@ -834,7 +834,9 @@ missing layer but the component checks ownership internally; Medium for lesser e
 Look for: `Route::livewire(...)`, `Route::get(...)` (or `Volt::route`) pointing at a Livewire
 full-page component that should require authentication/authorization but whose route carries
 no `auth` (or appropriate) middleware — and whose `mount()`/actions do not compensate with
-their own checks. Cross-reference route definitions against each full-page component.
+their own checks. Cross-reference route definitions against each full-page component. A
+plain view route (`Route::view`, or a controller returning a view) counts the same way when
+its view embeds such a component with `<livewire:... />`, `@livewire(...)` or `@volt`.
 
 ```php
 // routes/web.php

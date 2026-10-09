@@ -47,9 +47,10 @@ components are fully typed.
   belongs on a line in the report's "App-level checks and run notes" section. Written
   as a `###` block in any tier, Info included, it is graded as an invented finding.
 - `/`, `/pricing`, and `/feed` in `v4-app/routes/web.php` are intentionally public
-  routes. LW-22 is planted on `/account/settings` (a `Route::view` route) and on
-  `/admin/users/{userId}` (a `Route::livewire` route); an LW-22 finding on `/feed`
-  is a false positive.
+  routes. LW-22 is planted on `/account/settings` and on `/admin/users/{userId}`; an
+  LW-22 finding on `/feed` is a false positive. Every component route in that file uses
+  `Route::livewire(...)`, the form Livewire 4 requires for single-file and multi-file
+  components; `/` and `/pricing` are plain `Route::view` pages with no component.
 
 ---
 
@@ -130,15 +131,15 @@ Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refun
 
 | File | Check IDs | Plant description | Severity |
 |------|-----------|-------------------|----------|
-| `v4-app/routes/web.php` | LW-22 | `/account/settings` full-page Livewire route has no auth middleware (a protected `/billing` route is included for contrast) | High |
-| | LW-22 | `/admin/users/{userId}` is registered with `Route::livewire(...)`, the Livewire 4 routing form, and points at `admin.user-editor` with no auth middleware; the component checks nothing itself. If this row is missing, the route search did not see `Route::livewire` | Critical |
-| `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so the custom `EnsureUserIsVerified` middleware on `/billing` (`v4-app/routes/web.php`) is not re-applied to component update requests | High |
+| `v4-app/routes/web.php` | LW-22 | `/account/settings` full-page Livewire route has no auth middleware (a protected `/billing/{orderId}` route is included for contrast) | High |
+| | LW-22 | `/admin/users/{userId}` points at `admin.user-editor` with no auth middleware, and the component checks nothing itself | Critical |
+| `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so the custom `EnsureUserIsVerified` middleware on `/billing/{orderId}` (`v4-app/routes/web.php`) is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
 | `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | none: a line in the app-level section, not a finding |
 
 Supporting (non-planted) files: `v4-app/composer.json`, `v4-app/config/livewire.php`,
 `v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the custom middleware on the
-protected `/billing` route; it is what makes the LW-20 row fire).
+protected `/billing/{orderId}` route; it is what makes the LW-20 row fire).
 
 ---
 
@@ -215,7 +216,7 @@ instances across both apps.
 - [x] LW-19 (x7) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
 - [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level; recorded as a line in the report's app-level section, not a finding)
-- [x] LW-22 (x2) — routes/web.php unprotected `/account/settings` (`Route::view`) and `/admin/users/{userId}` (`Route::livewire`)
+- [x] LW-22 (x2) — routes/web.php unprotected `/account/settings` and `/admin/users/{userId}`
 - [x] LW-23 (x11) — untyped public properties across billing/checkout, admin/user-editor, messages/composer, v3 OrderEditor, orders/status-editor, social/greeting, auth/return-redirect, profile/show, feed/index, uploads/avatar, stats/dashboard
 - [x] LW-24 (x1) — orders/status-editor `updatedStatus()` hook writes with no ownership check
 - [x] LW-25 (x1) — social/greeting user-controlled `$displayName` interpolated into `$this->js(...)`

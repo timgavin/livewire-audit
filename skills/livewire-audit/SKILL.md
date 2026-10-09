@@ -70,7 +70,7 @@ grep -rn 'Volt::mount(' app/ 2>/dev/null
 
 Union the first two greps into the inventory: every functional or class Volt file imports from the `Livewire\Volt` namespace, and the `@volt(` grep catches inline fragments (their functional PHP block sits at the top of the same file). Confirm each candidate actually imports `Livewire\Volt` or contains an `@volt` fragment before counting it. In a functional file, `state([...])` entries are the public properties and closures assigned to variables are the public actions — the checklist's Volt note maps every check onto that syntax. The third grep is not a component search: by default Volt mounts `config('livewire.view_path')` (default `resources/views/livewire`) plus `resources/views/pages` — both already inside the search roots above — but an app's published `VoltServiceProvider` can `Volt::mount([...])` additional directories; re-run every component search in this step against any mounted path outside `resources/views/`.
 
-**Full-page component routes and their middleware.** Components reach routes several ways — `Route::livewire()` (the form the v4 docs give for every component type), class references, `Route::view()` pointing at a component view name, and Volt:
+**Full-page component routes and their middleware.** Components reach routes several ways — `Route::livewire()` (the form the v4 docs give for every component type), class references, Volt, and plain views (`Route::view()`) that embed components:
 
 ```
 grep -rnE "Route::livewire\(" routes/
@@ -79,7 +79,7 @@ grep -rnE "Route::view\(" routes/
 grep -rnE "Volt::route\(" routes/
 ```
 
-Every `Route::livewire()` hit is a full-page component route: its second argument is a component class or a component name (`'admin.user-editor'`, or namespaced, `'pages::post.create'`). Cross-reference every `Route::view()` target against the component inventory — a `Route::view('/x', 'components.foo.bar')` that resolves to a Livewire component file IS a full-page component route and gets the same middleware scrutiny.
+Every `Route::livewire()` hit is a full-page component route: its second argument is a component class or a component name (`'admin.user-editor'`, or namespaced, `'pages::post.create'`). A `Route::view()` target is an ordinary Blade view, not a component: open it and look for components it embeds (`<livewire:... />`, `@livewire(...)`, an inline `@volt` fragment). Those components sit behind that route's middleware, so the route gets the same scrutiny. In v4 a single-file or multi-file component cannot be served by `Route::view()` itself: Livewire renders a plain view as plain Blade and mounts nothing (verified, src/Mechanisms/ExtendBlade/ExtendedCompilerEngine.php), and the 4.x upgrade guide says such components require `Route::livewire()`.
 
 State the inventory to the user as two counts: components (class-based + SFC/MFC + Volt), and the full-page routes that point at them. If there are no components, say so and stop — do not audit non-Livewire code.
 

@@ -2,7 +2,6 @@
 
 use App\Http\Middleware\EnsureUserIsVerified;
 use Illuminate\Support\Facades\Route;
-use Livewire\Volt\Volt;
 
 /*
 |--------------------------------------------------------------------------
@@ -11,7 +10,7 @@ use Livewire\Volt\Volt;
 |
 | Full-page Livewire component routes for the application. Single-file
 | components live under resources/views/components and are referenced by
-| their dot-notated view name.
+| their component name.
 |
 */
 
@@ -19,20 +18,20 @@ Route::view('/', 'welcome')->name('home');
 
 Route::view('/pricing', 'pricing')->name('pricing');
 
-Route::view('/feed', 'components.feed.index')->name('feed');
+Route::livewire('/feed', 'feed.index')->name('feed');
 
-Route::view('/account/settings', 'components.profile.show')
+Route::livewire('/account/settings', 'profile.show')
     ->name('account.settings');
 
-Route::view('/billing', 'components.billing.checkout')
+Route::livewire('/billing/{orderId}', 'billing.checkout')
     ->middleware(['auth', EnsureUserIsVerified::class])
     ->name('billing');
 
-Route::view('/messages', 'components.messages.composer')
+Route::livewire('/messages', 'messages.composer')
     ->middleware('auth')
     ->name('messages');
 
-Route::view('/dashboard', 'components.stats.dashboard')
+Route::livewire('/dashboard', 'stats.dashboard')
     ->middleware('auth')
     ->name('dashboard');
 

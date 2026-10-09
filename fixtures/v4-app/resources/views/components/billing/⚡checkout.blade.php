@@ -29,7 +29,7 @@ new class extends Component {
 
         $order->update(['status' => 'paid', 'charged_amount' => $this->amount]);
 
-        $this->redirectRoute('billing', navigate: true);
+        $this->redirectRoute('billing', ['orderId' => $this->orderId], navigate: true);
     }
 }; ?>
 
