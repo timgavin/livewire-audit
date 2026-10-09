@@ -100,6 +100,8 @@ Tell each subagent:
 
 ## Step D: Verification gate (MANDATORY)
 
+First read `references/checklist.md` in full in the main conversation: the whole file, not its headings or excerpts. The gate, the app-level checks below and every finding's Fix line are judged against its entries; the one-line summaries in this step point at those entries and do not stand in for them.
+
 Nothing unverified reaches the report. For every finding returned by a subagent:
 
 - **Re-read** the flagged file at the flagged location in the main conversation.
@@ -108,7 +110,7 @@ Nothing unverified reaches the report. For every finding returned by a subagent:
 
 Then run the **app-level checks** in the main thread (these span the whole app, not one component, so subagents cannot own them):
 
-- **LW-12** — morph map / model alias registration in service providers (search `providers/` for `enforceMorphMap`, `morphMap`, `Relation::morphMap`).
+- **LW-12** — morph map / model alias registration in service providers (search `app/Providers/` for `enforceMorphMap`, `morphMap`, `Relation::morphMap`).
 - **LW-14** — global upload rules in `config/livewire.php` (`temporary_file_upload` rules / max size / mimes).
 - **LW-20** — `Livewire::addPersistentMiddleware(...)` registration in providers.
 - **LW-21** — `Livewire::setUpdateRoute(...)` (custom update endpoint and its middleware).
