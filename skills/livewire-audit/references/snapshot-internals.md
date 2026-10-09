@@ -1,7 +1,9 @@
 # Snapshot Internals: What Livewire Serializes to the Browser
 
 Facts verified against Livewire v4.3.0 source and official 3.x/4.x docs, 2026-06-11. Citations are
-short parentheticals against the Livewire v4.3.0 tree (`vendor/livewire/livewire/`).
+short parentheticals against the Livewire v4.3.0 tree (`vendor/livewire/livewire/`). Where Livewire 3
+behaves differently, section 5 says how; those differences were checked against the v3.8.10 source,
+2026-10-08.
 
 This is the reference for what a Livewire component puts in front of the client, what of that is
 readable in page source, and what a client can change. If you are auditing a Livewire app, this is
@@ -21,9 +23,10 @@ three top-level keys (HandleComponents.php, `toSnapshot()`):
   (HandleComponents.php builds `memo => ['id' => ..., 'name' => ..., ...$context->memo]`).
 - **`checksum`** — an HMAC-SHA256 over `data` + `memo`, keyed by the app encryption key
   (src/Mechanisms/HandleComponents/Checksum.php, `hash_hmac('sha256', ..., app('encrypter')->getKey())`).
-  On the next request, a mismatch throws `CorruptComponentPayloadException` (419). Core rate-limits
-  checksum failures at 10 per IP per 600s before throwing `TooManyRequestsHttpException`
-  (Checksum.php, `$maxFailures = 10`, `$decaySeconds = 600`, keyed by `request()->ip()`).
+  On the next request, a mismatch throws `CorruptComponentPayloadException` (419). v4 core also
+  rate-limits checksum failures at 10 per IP per 600s before throwing `TooManyRequestsHttpException`
+  (Checksum.php, `$maxFailures = 10`, `$decaySeconds = 600`, keyed by `request()->ip()`); v3 has no
+  such limiter.
 
 Example (illustrative shape — values depend on the component):
 
@@ -67,9 +70,10 @@ Models and Eloquent collections are re-fetched on the next hydrate, not restored
 `ModelSynth::hydrate()` runs `newQueryForRestoration($key)->useWritePdo()->firstOrFail()`
 (src/Features/SupportModels/ModelSynth.php). Two consequences worth flagging in an audit:
 
-- **`firstOrFail()` on hydrate** — the re-fetch is wrapped in a lazy proxy, so a deleted/inaccessible
-  row throws when the property is first accessed (lazily) on the next request, not silently — but a
-  component that never touches the property that request will not trigger the throw.
+- **`firstOrFail()` on hydrate** — in v4 the re-fetch is wrapped in a lazy proxy, so a
+  deleted/inaccessible row throws when the property is first accessed (lazily) on the next request,
+  not silently — but a component that never touches the property that request will not trigger the
+  throw. v3 runs the query during hydration on every request, so there it always throws.
 - **Query constraints are not re-applied.** If the property was assigned from a `select(...)`- or
   `where(...)`-narrowed query, hydrate re-loads the full row by primary key with no constraint
   (ModelSynth.php). See section 3(d).
@@ -107,8 +111,8 @@ after the first round-trip. Authorize on access; do not rely on narrowed loads a
 
 **Checksum prevents snapshot forgery.** A client cannot alter `data` or `memo` and have it accepted:
 the HMAC is keyed by the app encryption key, which the client does not have, so any edit fails
-`Checksum::verify()` with `CorruptComponentPayloadException` / 419 (Checksum.php). Repeated failures
-hit the 10/IP/600s limiter. One deliberate exception: `memo.children` is `unset()` before hashing
+`Checksum::verify()` with `CorruptComponentPayloadException` / 419 (Checksum.php). On v4, repeated
+failures hit the 10/IP/600s limiter. One deliberate exception: `memo.children` is `unset()` before hashing
 (Checksum.php) and is intentionally client-mutable — it is DOM-diff bookkeeping, not a security
 boundary, so do not treat anything you put in `children` as integrity-protected.
 
@@ -160,11 +164,13 @@ limited by a different mechanism, and only one of them protects its params:
   server-side `getIslands()` allowlist (the named island must already exist on the component),
   not by the checksum (SupportIslands.php).
 
-All three are client-invokable endpoints beyond plain public methods.
+All three are client-invokable endpoints beyond plain public methods. (v3 has the first two only;
+islands are a v4 feature.)
 
 **Lifecycle hooks are NOT on the callable surface, but they DO run on client input.** `mount`,
 `boot`/`booted`, `hydrate*`/`dehydrate*`, and `updating*`/`updated*` are in `$protectedMethods`
-(SupportLifecycleHooks.php) so they cannot be invoked as actions — but `updating{Prop}`/
+(SupportLifecycleHooks.php) so they cannot be invoked as actions (v3's list is shorter and leaves
+`boot`/`booted` callable; see section 5) — but `updating{Prop}`/
 `updated{Prop}` fire on every property update (every keystroke under `wire:model.live`) with the raw
 client value passed in. A write or authorization decision inside such a hook runs on untrusted input
 with none of the action-level scrutiny. See checklist LW-24.
@@ -177,10 +183,38 @@ Audit those alongside the snapshot.
 
 ## 5. v3 vs v4
 
-Per the official docs, the snapshot/serialization/tampering behavior described here is substantively
-identical between Livewire 3 and Livewire 4 (Livewire docs). The differences are component file layout
-and discovery (v4's single-file/multi-file components and the optional, purely-cosmetic high-voltage
-filename prefix) — not anything in this document. Everything above applies to both versions.
+The trust boundary is the same in Livewire 3 and Livewire 4. These were compared in the v3.8.10
+source against v4.3.0 and match: the snapshot's `data`/`memo`/`checksum` shape and the HMAC over it
+(with `memo.children` left out), what the model and Eloquent-collection synthesizers dehydrate and
+refuse, `#[Locked]` (including deep writes under a locked name), the callable-surface allowlist,
+`PublicPropertyNotFoundException` for an undeclared property, deep writes into arrays, the default
+persistent-middleware list, the `cache:` and `persist:` computed keys and the 3600-second default,
+the temporary-upload defaults, and the `dispatches` and `xjs` effects.
+
+These differ, and the checklist's version notes rely on them:
+
+- **`setUpdateRoute()`.** v4 adds the Livewire header guard and the `web` group to whatever route
+  the callback returns. v3 adds nothing: the route keeps exactly the middleware the callback gave it
+  (src/Mechanisms/HandleRequests/HandleRequests.php in each). On v3 a custom update route without
+  `web` has no session and no CSRF verification. See checklist LW-21.
+- **Checksum-failure rate limiting** (10 per IP per 600s) is v4 only. v3's Checksum.php throws
+  `CorruptComponentPayloadException` and does nothing else.
+- **Model re-fetch on hydrate.** v4 wraps it in a lazy proxy and reuses a route-bound model; v3
+  runs `firstOrFail()` during hydration on every request (ModelSynth.php in each).
+- **Lifecycle methods that cannot be called as actions.** v4: `mount`, `boot`, `booted`,
+  `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`, `rendering`, `rendered`. v3:
+  `mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*` only, so a public
+  `boot()`, `booted()`, `rendering()` or `rendered()` is client-callable there
+  (SupportLifecycleHooks.php in each).
+- **Framework magic entry points.** v3 has `__dispatch` and `__lazyLoad`. Islands and
+  `__lazyLoadIsland` are v4 only.
+- **Authorization attribute.** `#[Authorize]` exists in v4 only, and v4 runs it on the `__dispatch`
+  path before the listener is called (SupportEvents.php). v3 has no such attribute.
+- **A wrong-type value on a typed property.** v4 turns the `TypeError` into `abort(419)` in
+  production; v3 re-throws it (HandleComponents.php, `setComponentPropertyAwareOfTypes()`). Both
+  reject the value. Section 6 describes v4.
+- **Routing and layout.** `Route::livewire()`, single-file and multi-file components, and the
+  optional, purely-cosmetic high-voltage filename prefix are v4 only.
 
 ## 6. Type-mismatch behavior
 

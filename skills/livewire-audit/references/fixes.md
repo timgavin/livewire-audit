@@ -226,9 +226,12 @@ Livewire::setUpdateRoute(fn ($handle) =>
 );
 ```
 
-Add whatever global middleware your app needs (e.g. a throttle). Note (verified, src/Mechanisms/HandleRequests/HandleRequests.php): `setUpdateRoute()` force-adds the `web` group and the Livewire header guard even if you omit them, so you CANNOT accidentally strip CSRF/session via this API — the framework re-adds them. The genuine LW-21 finding is therefore narrow: a custom update route placed on the wrong domain/prefix, or behind an extra middleware group that changes auth context — not "lost CSRF."
+Add whatever global middleware your app needs (e.g. a throttle). The two major versions differ here (verified, src/Mechanisms/HandleRequests/HandleRequests.php in v4.3.0 and v3.8.10):
 
-NOT: do not report LW-21 as "the update route lost CSRF because web was dropped" — that is not achievable through `setUpdateRoute` in v4.
+- **v4:** `setUpdateRoute()` force-adds the `web` group and the Livewire header guard even if you omit them, so you cannot strip CSRF/session through this API. The genuine LW-21 finding is narrow: a custom update route placed on the wrong domain/prefix, or behind an extra middleware group that changes auth context — not "lost CSRF."
+- **v3:** `setUpdateRoute()` adds nothing. The route keeps exactly the middleware your callback gives it, so a custom route that leaves out `web` has no session and no CSRF verification on any component update. Always include `web`, as the example above does.
+
+NOT: on a v4 app, do not report LW-21 as "the update route lost CSRF because web was dropped" — that is not achievable through `setUpdateRoute` in v4. On a v3 app it is achievable, and it is the finding.
 
 ---
 
@@ -290,7 +293,7 @@ NOT: do not use `cache: true` for per-user data — it is keyed by component nam
 
 When to use (LW-23): public properties and action parameters are untyped, so the engine silently accepts whatever the client sends. `public $ids = [];` becomes `public array $ids = [];`, and `function show($id)` becomes `function show(int $id)`.
 
-Engine behavior: a typed property plus a wrong-type client value raises a `TypeError` that Livewire catches — empty-string/null unsets the property, otherwise it aborts with HTTP 419 in production. Typing turns silent acceptance into rejection.
+Engine behavior: a typed property plus a wrong-type client value raises a `TypeError` that Livewire catches — empty-string/null unsets the property; otherwise v4 aborts with HTTP 419 in production and v3 re-throws the error (verified, HandleComponents.php `setComponentPropertyAwareOfTypes()` in v4.3.0 and v3.8.10). Either way typing turns silent acceptance into rejection.
 
 NOT: do not type only properties while leaving action parameters untyped — the parameter is a client-controlled surface too.
 
@@ -333,15 +336,20 @@ NOT: do not assume a method named like a hook is "internal and safe" — `update
 
 When to use (LW-25): a `$this->js()` expression (or `#[Js]` method) interpolates a user-controlled value into the evaluated JavaScript string.
 
-Pass dynamic values as data through the second `params` argument (surfaced to the expression), never by concatenating into the code string:
+Pass dynamic values as params, never by concatenating into the code string. `js($expression, ...$params)` takes its extra arguments as positional params; in the browser the expression is evaluated first and, if the result is a function, that function is called with the params (verified in v4.3.0 and v3.8.10: src/Features/SupportJsEvaluation/HandlesJsEvaluation.php and the `xjs` handler in dist/livewire.esm.js). So make the expression a function and let the value arrive as its argument:
 
 ```php
 // before: value concatenated into evaluated JS -> XSS
 $this->js("showToast('Welcome, {$user->display_name}')");
 
-// after: value passed as a param, referenced by name -> treated as data, not code
-$this->js('showToast(name)', ['name' => $user->display_name]);
+// after: the expression is a function reference; the value is its argument -> data, never parsed as code
+$this->js('showToast', "Welcome, {$user->display_name}");
+
+// or an inline function, when the call needs shaping
+$this->js('(name) => showToast(`Welcome, ${name}`)', $user->display_name);
 ```
+
+A param is never a named variable inside the expression: `$this->js('showToast(name)', ['name' => $value])` leaves `name` undefined in the browser, so it removes the injection and breaks the call.
 
 If you only need to hand data to Alpine, prefer a dispatched event or a `data-*`/`@js()` attribute over building a code string at all.
 

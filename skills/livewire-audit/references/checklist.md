@@ -12,11 +12,16 @@ file names, route names, or what a component "probably" does. If the evidence is
 the file, it is not a finding.
 
 Every finding MUST include: **file and line** (absolute path, line of the offending
-code); **check ID** (`LW-NN`); **severity** (per the scale and per-check guidance);
+code); **check ID** (`LW-NN`); **severity** (per the check's own guidance; the scale below
+defines the tiers and decides where that guidance is silent);
 **evidence quote** (the actual offending code, copied exactly, not paraphrased);
 **impact** (one sentence — what a user could change or see, e.g. "any signed-in user can
 set the order total to zero"; no attack steps or payloads); **fix pattern** (the `fixes.md` name in the
 check entry).
+
+Each check below has a "Why exploitable" paragraph. It is there so you understand the risk and
+can judge whether it applies; it is not a model for your impact sentence. Never copy its
+steps or payloads into a finding.
 
 When you cannot be certain a finding is real — authorization might live in a trait you
 cannot see, a policy might be applied upstream, the property might be locked by a parent —
@@ -92,8 +97,9 @@ livewire.laravel.com/docs/3.x/volt):
 
 Severity guidance: Critical when the method runs a destructive, financial, or
 ownership-changing operation (delete, refund, approve, transfer, role change) with no
-authorization; High when it mutates state the caller should not control with limited blast
-radius; Medium when it only reads data the caller is not entitled to.
+authorization, or returns another user's private data; High when it mutates state the caller
+should not control with limited blast radius; Medium when it only reads low-sensitivity
+data the caller is not entitled to.
 
 Look for: every public method on the component (other than `render` and Livewire lifecycle
 hooks) is callable from the browser via `$wire.methodName(...)` whether or not any
@@ -119,9 +125,14 @@ Why exploitable: the attacker opens devtools on any page mounting this component
 `$wire.deletePost(7)` with an ID they do not own, and — with no UI gate and no server-side
 ownership/policy check — the delete runs.
 
-Version notes: identical in v3 and v4; the callable-surface rule is the same. v4 just adds
-single-file and multi-file layouts, so also inspect the embedded `new class extends
-Component` block, not only `app/Livewire/` classes.
+Version notes: the callable-surface rule is the same in v3 and v4, with two differences
+checked against the v3.8.10 source. v3 has no islands, so its magic methods are `__dispatch`
+and `__lazyLoad` only. And v3 protects fewer lifecycle names from being called as actions:
+`mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`. A public `boot()`,
+`booted()`, `rendering()` or `rendered()` on a v3 component is client-callable like any other
+public method (v4 blocks those too; SupportLifecycleHooks.php in each), so on v3 audit them as
+actions. v4 adds single-file and multi-file layouts, so also inspect the embedded `new class
+extends Component` block, not only `app/Livewire/` classes.
 
 When the unauthorized method is also referenced by NO `wire:` directive anywhere in the
 template, additionally tag LW-07 in the same block — an unwired public method is both an
@@ -252,8 +263,9 @@ Fix: see fixes.md "validate-untrusted-binding" (legitimately-bound field) or "lo
 ## LW-05: `#[On]` listeners
 
 Severity guidance: Critical when the listener performs a destructive or financial action
-on attacker-supplied payload; High when it mutates state the caller should not control;
-Medium when it only refreshes or reads.
+on attacker-supplied payload, or returns another user's private data; High when it mutates
+state the caller should not control; Medium when it only refreshes, or reads low-sensitivity
+data.
 
 Look for TWO declaration styles, grep for BOTH:
 - attribute style: `#[On('event-name')]` on a method;
@@ -267,10 +279,11 @@ and validate every field. Dynamic event names (`#[On('post.{postId}')]` / `'orde
 'refresh'`) resolve the `{placeholder}` from component state, so a client-writable property
 in the placeholder lets the attacker influence which events bind — audit those too.
 
-Precision note: a listener method that already carries an authorization ATTRIBUTE (e.g.
-`#[Can('update', 'post')]`) IS checked by the dispatch path, so do not flag it as
-unauthorized; the gap is a listener relying on an in-body Gate call that is absent, or no
-check at all.
+Precision note (v4 only): a listener method that carries Livewire's authorization attribute,
+`#[Authorize('update', 'post')]`, IS checked by the dispatch path (verified,
+src/Features/SupportEvents/SupportEvents.php), so do not flag it as unauthorized; the gap is
+a listener relying on an in-body Gate call that is absent, or no check at all. v3 has no
+such attribute (checked against v3.8.10), so on v3 only an in-body check counts.
 
 ```php
 #[On('post-approved')]
@@ -402,6 +415,11 @@ itself is protected (class+key serialization), but copying an attribute into a p
 scalar puts the **value** in the snapshot. Critically, `$hidden` gives no protection here:
 model protection is structural (key-only serialization), and `$hidden` is never consulted
 when you assign the raw value to a public property.
+
+Do not flag the signed-in user's own data when the page already shows it to them or lets
+them edit it (their own email on a profile form, a setting they toggle): the snapshot
+exposes nothing the page does not. LW-09 is for an attribute the page does not show, or one
+that belongs to someone else.
 
 ```php
 public $email;
@@ -564,7 +582,12 @@ for a file. Two distinct gates, check BOTH:
   `#[Validate('image')]` does NOT stop an attacker from uploading a 12 MB arbitrary-type
   file to the temp endpoint — only the global rule does.
 Flag a missing per-property rule AND a default/absent global rule; the global default is
-effectively "any file up to 12 MB," which is the more dangerous gap.
+effectively "any file up to 12 MB," which is the more dangerous gap. The endpoint needs a
+signed URL, which the upload trait hands to any client that can call the component, and is
+throttled at 60 requests a minute by default (verified, FileUploadController.php,
+WithFileUploads.php `_startUpload()`, FileUploadConfiguration.php). State the impact in
+those terms: whoever can load a page with an upload field can store arbitrary files in
+temporary storage.
 
 ```php
 use WithFileUploads;
@@ -793,16 +816,23 @@ Fix: see fixes.md "persistent-middleware"
 
 Severity guidance: almost always Info for a customized route. Escalate to Low/Medium only
 for a genuinely odd customization (custom route on the wrong domain or prefix, or wrapped in
-an extra middleware group that changes the auth context). An app that does not customize
-the route has no finding here.
+an extra middleware group that changes the auth context). High on v3 when the custom route
+leaves out `web` (see below). An app that does not customize the route has no finding here.
 
 Look for: customizations to the Livewire update endpoint via `Livewire::setUpdateRoute(...)`.
-IMPORTANT — do NOT report "the custom route dropped `web` so CSRF/session is lost": that is
-not achievable. `setUpdateRoute()` force-injects the `web` group and the Livewire header
-guard onto whatever route the callback returns, even if you omit them (verified,
-src/Mechanisms/HandleRequests/HandleRequests.php). So you cannot strip CSRF/session through
-this API. The only real findings are: the custom route placed on an unexpected domain/prefix,
-or behind additional middleware that alters authentication/authorization for update requests.
+What a customization can break depends on the major version (verified,
+src/Mechanisms/HandleRequests/HandleRequests.php in v4.3.0 and v3.8.10):
+
+- **On v4,** do NOT report "the custom route dropped `web` so CSRF/session is lost": that is
+  not achievable. `setUpdateRoute()` force-injects the `web` group and the Livewire header
+  guard onto whatever route the callback returns, even if you omit them. The only real
+  findings are the custom route placed on an unexpected domain/prefix, or behind additional
+  middleware that alters authentication/authorization for update requests.
+- **On v3,** `setUpdateRoute()` adds nothing: the route keeps exactly the middleware the
+  callback gave it. A custom route whose middleware does not include `web` (or its own
+  session and CSRF verification) has neither on every component update. Report it, High.
+  The domain/prefix and extra-middleware findings apply as on v4.
+
 If there is no `setUpdateRoute` call at all, the default is safe. That is a clean result,
 not a finding: the report records it as one line in its app-level section ("LW-21: clean -
 default update route, no customization").
@@ -815,11 +845,13 @@ Livewire::setUpdateRoute(fn ($handle) =>
 ```
 
 Why exploitable (when it is): a custom update route on a different domain or middleware group
-can land in an auth context the rest of the app does not expect. The framework guarantees
-`web` and the header guard regardless, so CSRF/session are NOT the vector — the misrouting is.
+can land in an auth context the rest of the app does not expect. On v4 the framework
+guarantees `web` and the header guard regardless, so CSRF/session are not the vector there —
+the misrouting is. On v3 nothing is guaranteed, so a route without `web` takes every
+component update with no CSRF check.
 
-Version notes: identical in v3 and v4; `Livewire::setUpdateRoute()` exists and force-adds
-`web` + the header guard in both.
+Version notes: NOT identical. `Livewire::setUpdateRoute()` exists in both; v4 force-adds
+`web` and the header guard, v3 does not.
 
 Fix: see fixes.md "harden-update-route"
 
@@ -873,7 +905,8 @@ Look for: public properties and action-method parameters with no native type dec
 An untyped public property accepts any JSON shape the client sends (string, array, object,
 number) and hydrates it as-is. A typed property causes a PHP `TypeError` on a wrong-shaped
 value, which Livewire catches: empty-string/null unsets the property to null, and any other
-mismatch aborts with HTTP 419 in production. Typing constrains the accepted shapes — defense
+mismatch is rejected (v4 aborts with HTTP 419 in production; v3 re-throws the `TypeError`).
+Typing constrains the accepted shapes — defense
 in depth that closes the "smuggle an array where a scalar was expected" class, not a
 standalone vulnerability.
 
@@ -886,12 +919,13 @@ public function load() { User::where('id', $this->userId)->first(); }
 Why exploitable: with the property untyped, the attacker sends an array or object where the
 code expects a scalar and the unexpected shape reaches the query or write, potentially
 confusing query builders or downstream logic; typing the property (`public int $count`,
-`public ?int $userId`) makes PHP reject the wrong shape with a `TypeError` that Livewire
-turns into a 419. On its own a missing type is hardening; it becomes material when the
+`public ?int $userId`) makes PHP reject the wrong shape with a `TypeError` (a 419 on v4, a
+server error on v3). On its own a missing type is hardening; it becomes material when the
 property feeds sensitive logic.
 
-Version notes: identical in v3 and v4; the typed-property `TypeError`-to-419 behavior (with
-empty-string/null unsetting to null) is the same.
+Version notes: both versions reject a wrong-type value on a typed property and unset it on
+empty-string/null. v4 converts the `TypeError` to a 419 in production; v3 re-throws it
+(HandleComponents.php `setComponentPropertyAwareOfTypes()` in v4.3.0 and v3.8.10).
 
 Fix: see fixes.md "type-everything"
 
@@ -909,7 +943,8 @@ expensive query, an external call, or a redirect using the incoming value or a p
 property — `updated(...)`, `updating(...)`, `updated{Property}(...)`, `updating{Property}(...)`,
 `hydrate(...)`/`hydrate{Property}(...)`, `boot()`, `booted()`, `mount(...)`. These are NOT on
 the action callable surface (LW-01 explicitly skips them, and they cannot be invoked as
-`$wire` actions), which is exactly why they get missed — but `updated{Prop}`/`updating{Prop}`
+`$wire` actions; the one exception is v3, where `boot()`/`booted()` are not blocked — see
+LW-01's version notes), which is exactly why they get missed — but `updated{Prop}`/`updating{Prop}`
 fire on EVERY update to that property (every keystroke under `wire:model.live`), receiving the
 raw client value as the first argument. A side effect in the hook runs on untrusted input with
 none of an action's authorization.
@@ -955,8 +990,9 @@ Why exploitable: the interpolated value becomes live JavaScript executed client-
 attacker who controls it (their own display name, a comment, any stored field) achieves XSS
 that bypasses Blade escaping entirely — and sails past a CSP that allows `unsafe-eval`.
 
-Version notes: v4 feature surface (`$this->js`, `$wire.$js`); the injection risk is the same
-wherever `$this->js()`/`#[Js]` exists.
+Version notes: `$this->js()` and `#[Js]` exist in v3 and v4, and the expression reaches the
+browser as an `xjs` effect in both (SupportJsEvaluation in v3.8.10 and v4.3.0); the injection
+risk is the same in each.
 
 Fix: see fixes.md "js-params-not-interpolation"
 
