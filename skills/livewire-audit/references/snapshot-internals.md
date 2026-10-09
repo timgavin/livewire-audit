@@ -140,18 +140,27 @@ the subclass, minus `render`) — the allowlist checked in `HandleComponents::ca
 (`in_array($method, $methods)`). PLUS three framework magic entry points that short-circuit that
 allowlist via lifecycle `call` hooks that return early before the `in_array` check:
 
-- `__dispatch` — event dispatch (HandleComponents.php).
+- `__dispatch` — event dispatch (src/Features/SupportEvents/SupportEvents.php).
 - `__lazyLoad` — re-runs the component `mount()` with encoded mount params
   (src/Features/SupportLazyLoading/SupportLazyLoading.php).
 - `__lazyLoadIsland` — island lazy render (src/Features/SupportIslands/SupportIslands.php).
 
-These are framework-controlled and cannot be turned into arbitrary method calls, but by two
-different mechanisms: `__dispatch` and `__lazyLoad` carry an encoded snapshot that is re-verified
-through `Checksum::verify()` (so the params are integrity-protected), while `__lazyLoadIsland` reads
-the island name from the call metadata and is protected instead by the server-side `getIslands()`
-allowlist (the named island must already exist on the component) — not by the checksum. Either way a
-client cannot substitute arbitrary inputs, but note both are additional client-invokable endpoints
-beyond plain public methods.
+These are framework-controlled and cannot be turned into arbitrary method calls, but each is
+limited by a different mechanism, and only one of them protects its params:
+
+- `__lazyLoad` takes an encoded snapshot and passes it through `fromSnapshot()`, whose first
+  step is `Checksum::verify()` (SupportLazyLoading.php `resurrectMountParams()`;
+  HandleComponents.php `fromSnapshot()`). Its mount params are integrity-protected.
+- `__dispatch` is NOT checksum-protected. The event name and params come straight from the call.
+  The name must match one of the component's registered listeners; any authorization attribute
+  on that listener method is run; the method is then called with the client's params
+  (SupportEvents.php). Reach is limited to listener methods, the payload is not limited at all —
+  see checklist LW-05.
+- `__lazyLoadIsland` reads the island name from the call metadata and is limited by the
+  server-side `getIslands()` allowlist (the named island must already exist on the component),
+  not by the checksum (SupportIslands.php).
+
+All three are client-invokable endpoints beyond plain public methods.
 
 **Lifecycle hooks are NOT on the callable surface, but they DO run on client input.** `mount`,
 `boot`/`booted`, `hydrate*`/`dehydrate*`, and `updating*`/`updated*` are in `$protectedMethods`

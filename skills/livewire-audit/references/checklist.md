@@ -99,8 +99,11 @@ Look for: every public method on the component (other than `render` and Livewire
 hooks) is callable from the browser via `$wire.methodName(...)` whether or not any
 `wire:click` references it. The callable surface is exactly the subclass-defined public
 methods minus `render`, plus framework magic methods `__dispatch`, `__lazyLoad`,
-`__lazyLoadIsland` (those three carry checksum-protected payloads — framework-controlled,
-not app-callable). Flag any public method that performs an authorized-only operation with
+`__lazyLoadIsland`. Those three cannot be turned into arbitrary method calls, but only
+`__lazyLoad` carries a checksum-verified payload: `__dispatch` reaches only methods
+registered as listeners and hands them client-chosen params (see LW-05), and
+`__lazyLoadIsland` renders only an island the component defines (snapshot-internals.md,
+"Callable surface"). Flag any public method that performs an authorized-only operation with
 no `Gate`/policy check, or that trusts its parameters as if they came from the UI. The
 docs call unauthorized action parameters "arguably the most common security pitfall in
 Livewire."
@@ -427,7 +430,9 @@ users; Medium when the scope error is real but the data is low-sensitivity.
 Look for: computed methods with `#[Computed(cache: true)]` whose body depends on the
 current user, current request, or any per-instance state. `cache: true` stores **one**
 value shared across every component instance application-wide — the first user to populate
-it serves their data to everyone else until it expires.
+it serves their data to everyone else until it expires (verified,
+src/Features/SupportComputed/BaseComputed.php: the cache key is
+`lw_computed.<component name>.<method>`, with no instance or user in it).
 
 ```php
 #[Computed(cache: true)]
@@ -455,7 +460,9 @@ persisted value is trivial.
 
 Look for: computed methods with `#[Computed(persist: true)]` returning sensitive data.
 `persist: true` stores the value in the Laravel cache per component instance (keyed per
-instance, not globally shared like `cache: true`) with a default TTL of 3600 seconds. Flag
+instance, not globally shared like `cache: true`) with a default TTL of 3600 seconds
+(verified, BaseComputed.php: the key is `lw_computed.<component id>.<method>` and
+`$seconds` defaults to 3600). Flag
 long TTLs on sensitive output, and any persisted value whose staleness or storage-at-rest
 is a problem. Check every `#[Computed]` on the component independently — a `cache: true`
 finding (LW-10) on one method does NOT cover a `persist:` problem on another; they are
@@ -551,7 +558,9 @@ for a file. Two distinct gates, check BOTH:
   what gets stored on the component's validate/update cycle;
 - the GLOBAL `temporary_file_upload.rules` in `config/livewire.php` — this is the ONLY
   thing that gates the temporary-upload POST endpoint (`livewire/upload-file`). Its default
-  is `['required','file','max:12288']`: 12 MB and ANY MIME type. So a property-level
+  is `['required','file','max:12288']` (verified,
+  src/Features/SupportFileUploads/FileUploadConfiguration.php, `rules()`): 12 MB and ANY
+  MIME type. So a property-level
   `#[Validate('image')]` does NOT stop an attacker from uploading a 12 MB arbitrary-type
   file to the temp endpoint — only the global rule does.
 Flag a missing per-property rule AND a default/absent global rule; the global default is
@@ -564,8 +573,8 @@ public function save() { $this->avatar->store('avatars'); }  // any file, any si
 ```
 
 Why exploitable: the attacker uploads an arbitrary file type or oversized file (a PHP
-script, an executable, a multi-gigabyte payload) because no `mimes`/`max` rule constrains
-it — enabling, depending on how the stored file is served or processed, content-policy
+script, an executable, anything up to the global size cap, 12 MB by default) because no
+`mimes`/`max` rule constrains it — enabling, depending on how the stored file is served or processed, content-policy
 bypass, storage exhaustion, or code execution.
 
 Version notes: identical in v3 and v4; `WithFileUploads`, `#[Validate]`, and the global
@@ -584,14 +593,18 @@ columns; Medium when the model is well-guarded but the pattern is fragile.
 
 Look for: `fill($this->all())`, `Model::create($this->all())`,
 `$model->update($this->except(...))`, or `->fill($request)`-style patterns where the source
-array is built from client-settable public properties. Every public property is
-client-writable, so an attacker can introduce keys (`is_admin`, `user_id`, `price`) that
-the mass assignment writes if the model is not strictly guarded.
+array is built from client-settable public properties. Every declared public property is
+client-writable, so `$this->all()` hands the mass assignment all of them, including ones no
+input binds (`role`, `user_id`, `price`), and the model writes whichever are fillable. A
+client cannot add a property the class does not declare: a write to an undeclared name
+throws `PublicPropertyNotFoundException` (verified,
+src/Mechanisms/HandleComponents/HandleComponents.php, `updateProperty()`).
 
 ALSO flag a public ARRAY (or Form object) property passed whole to `create()`/`update()`/
 `fill()` even without `$this->all()` — e.g. `Model::create($this->data)` or
 `->fill($this->form->toArray())`. Livewire supports deep writes: `$wire.set('data.is_admin',
-true)` injects a key into the array property `$data`, which the mass assignment then writes.
+true)` injects a key into the array property `$data`, which the mass assignment then writes
+(verified, HandleComponents.php, `recursivelySetValue()` creates the missing nested key).
 An auditor matching only `all()`/`except()` signatures gives a false negative here. (A
 `#[Locked]` array property blocks these deep writes — the locked-attribute hook fires for any
 path rooted at the locked name — so locking is a valid fix for an array that should not take
@@ -599,7 +612,7 @@ client-injected keys.)
 
 ```php
 public function save() {
-    Post::create($this->all());   // attacker adds user_id/is_featured via $wire.set
+    Post::create($this->all());   // every declared public property goes in, bound or not
 }
 
 public array $data = [];
@@ -608,10 +621,12 @@ public function store() {
 }
 ```
 
-Why exploitable: the attacker uses `$wire.set('is_admin', true)` (or any fillable column
-name) to inject an extra property, then triggers `save()`; `$this->all()` collects every
-public property including the smuggled one, and the unguarded mass assignment writes the
-attacker-chosen column.
+Why exploitable: the attacker sets a declared public property the form does not expose
+(`$wire.set('role', 'admin')`), or deep-writes a new key into a declared array property
+(`$wire.set('data.is_admin', true)`), then triggers `save()`; `$this->all()` or the whole
+array carries it into the mass assignment, which writes the attacker-chosen column if it is
+fillable. The surface is the declared properties and anything nested under a declared
+array, not arbitrary new property names.
 
 Version notes: identical in v3 and v4; `$this->all()` collecting all public properties is
 the same.
