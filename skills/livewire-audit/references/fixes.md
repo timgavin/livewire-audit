@@ -1,6 +1,6 @@
 # Livewire Security Fixes — Canonical Patterns
 
-Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > visibility change > `#[Computed]` conversion > authorization insertion > restructure. Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, stop and ask the user — never guess an authorization rule.
+Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > visibility change > `#[Computed]` conversion > authorization insertion > restructure. Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, leave that finding unfixed and ask the user — never guess an authorization rule.
 
 Each pattern below is referenced by name from `checklist.md`. The names are a fixed interface; do not rename them.
 
@@ -86,7 +86,7 @@ Visibility variant — every public method is client-callable with no `wire:` di
 
 Volt functional API: `$this->authorize(...)` works inside action closures (`Livewire\Volt\Component` extends `Livewire\Component`, and `$this` in a closure is the component). The visibility variant is `protect()`: `$helper = protect(function () { ... });` makes the closure callable from other actions via `$this->helper()` but not from the client (Volt docs).
 
-NOT: do not invent the policy ability or gate name — if the correct rule is not obvious from existing policies, stop and ask.
+NOT: do not invent the policy ability or gate name — if the correct rule is not obvious from existing policies, leave the finding unfixed and ask.
 
 ---
 

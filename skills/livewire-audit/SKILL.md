@@ -16,7 +16,7 @@ This is a defensive audit of the user's own application, run at the owner's requ
 ## Modes
 
 - **No args (default): read-only audit.** Make no changes to application code. The only file you write is the report at `livewire-audit-YYYY-MM-DD.md` (today's date) in the target project's root directory.
-- **`--fix`: audit then remediate.** Run or refresh the audit, then apply fixes for confirmed findings only. Never commit. Never weaken or remove validation rules. On any ambiguous authorization decision (which policy applies, who is allowed to call an action), stop and ask the user instead of guessing.
+- **`--fix`: audit then remediate.** Run or refresh the audit, then apply fixes for confirmed findings only. Never commit. Never weaken or remove validation rules. On any ambiguous authorization decision (which policy applies, who is allowed to call an action), leave that finding unfixed and ask the user instead of guessing.
 
 Across both modes: **never run git commands.** No `git add`, `commit`, `stash`, `checkout`, or `push`. Leave all changes uncommitted for the user to review.
 
@@ -191,20 +191,20 @@ After writing the report, end your reply by stating its exact path (`livewire-au
 
 ## Fix mode (`--fix` only)
 
-For each confirmed finding, in severity order (Critical first):
+For each confirmed finding from Critical down to Low, in severity order (Info findings need no action and get no fix):
 
 - Apply the matching pattern from `references/fixes.md`, smallest change first (the ordering note at the top of `fixes.md` explains the precedence).
-- Re-run the relevant check against the changed file to confirm the fix holds.
+- Re-run the relevant check against the changed file. If it passes, the result is `pass`. If it does not, the result is `fail`: leave the edit in place, say what still fails, and do not try to undo it.
 - Leave the change uncommitted.
 - Never weaken or remove validation.
 
-If a fix requires a product decision (which authorization policy applies, what the valid value set for a property is, whether an action should be reachable at all), do NOT guess. Collect those into a list of questions and ask the user.
+If a fix requires a product decision (which authorization policy applies, what the valid value set for a property is, whether an action should be reachable at all), do NOT guess. Edit nothing for that finding, record it as `needs-decision` with the question, and go on to the next finding. Ask the user the collected questions at the end.
 
 Finish with a summary table:
 
 ```
 | Finding | Fix applied | Re-check result |
-| LW-NN   | ...         | pass/needs-decision |
+| LW-NN   | ...         | pass/fail/needs-decision |
 ```
 
 ## Reminders

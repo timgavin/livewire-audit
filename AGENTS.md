@@ -91,7 +91,8 @@ protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is fo
 - Read-only mode writes exactly one file (the report); `--fix` mode additionally edits flagged source.
 - Never run git commands at any point. Never run migrations or seeders. Never modify a database.
 - Never weaken or remove validation as a "fix."
-- On an ambiguous authorization decision (which policy/gate applies), stop and ask — never guess.
+- On an ambiguous authorization decision (which policy/gate applies), leave that finding unfixed and
+  ask — never guess. The fix run goes on to the next finding.
 - "Nothing found" is a valid result; never pad a report or invent findings.
 
 ## Component discovery nuance
