@@ -104,7 +104,8 @@ protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is fo
 
 ## Hard invariants the skill itself enforces (preserve these when editing SKILL.md)
 
-- Read-only mode writes exactly one file (the report); `--fix` mode additionally edits flagged source.
+- Read-only mode writes exactly one file (the report); `--fix` mode additionally edits flagged source
+  and the existing files a fix pattern requires, and never creates a file.
 - Never run git commands at any point. Never run migrations or seeders. Never modify a database.
 - Never weaken or remove validation as a "fix."
 - On an ambiguous authorization decision (which policy/gate applies), leave that finding unfixed and

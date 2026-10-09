@@ -18,7 +18,7 @@ This is a defensive audit of the user's own application, run at the owner's requ
 - **No args (default): read-only audit.** Make no changes to application code. The only file you write is the report at `livewire-audit-YYYY-MM-DD.md` (today's date) in the target project's root directory.
 - **`--fix`: audit then remediate.** Run the audit (Steps A to F), then apply fixes for confirmed findings only. Never commit. Never weaken or remove validation rules. On any ambiguous authorization decision (which policy applies, who is allowed to call an action), leave that finding unfixed and ask the user instead of guessing.
 
-Across both modes: **never run git commands.** No `git add`, `commit`, `stash`, `checkout`, or `push`. Leave all changes uncommitted for the user to review.
+Across both modes: **never run git commands.** No `git add`, `commit`, `stash`, `checkout`, or `push`. Leave all changes uncommitted for the user to review. **Never modify a database, and never run migrations or seeders,** in either mode.
 
 ## Step A: Detect version and paths
 
@@ -106,7 +106,7 @@ Nothing unverified reaches the report. Check coverage first: every component you
 
 - **Re-read** the flagged file at the flagged location in the main conversation.
 - Confirm the quoted evidence actually exists at that location and the vulnerability logic holds.
-- For a candidate marked `needs main-thread confirmation`, the open question is usually somewhere other than the flagged line. Read what the subagent said it could not see (a trait, a base class, a policy or middleware applied upstream, the parent component) and settle it. If the code that would settle it is not in the project, the candidate is not confirmed: discard it and say why.
+- For a candidate marked `needs main-thread confirmation`, the open question is usually somewhere other than the flagged line. Read what the subagent said it could not see (a trait, a base class, a policy or middleware applied upstream, the parent component) and settle it. Discard the candidate only when what you read answers the doubt against it. If the code that would settle it is not in the project (a model, a policy, a package), the doubt stands and so does the finding: keep it, and say in its Impact line what could not be verified. Never drop a finding because something outside the project might make it safe.
 - Discard false positives. Keep a running count of how many you discarded.
 
 Then run the **app-level checks** in the main thread (these span the whole app, not one component, so subagents cannot own them):
@@ -180,6 +180,7 @@ Repeat the finding block per severity tier (Critical, High, Medium, Low, Info). 
 Consolidation and counting rules — follow exactly:
 
 - Merge checks into one block ONLY when they fire on the same code AND share the same fix, meaning one edit to that code resolves both (an unlocked untyped id = LW-02 + LW-23: one edit to the declaration, one block). Checks with DIFFERENT fixes always get separate blocks, even on the same component or the same template (LW-16 bind-not-interpolate and LW-17 escape-output are two blocks; LW-10 cache: and LW-11 persist: on the same component are two blocks).
+- A block never spans components. The same check in five components is five blocks, each with its own `<file>:<line>`, however alike the fix; listing other files in one block's Evidence line hides them and miscounts the report. Within one component, several instances of the same check may share a block.
 - A merged block's severity tier is the HIGHEST severity among its merged checks — never place a block below its worst check's tier. If you write "treat its true severity as Critical," the block belongs in Critical.
 - Name every applicable check ID inside its block so each is traceable; nothing gets silently absorbed into another finding's prose. Before writing the report, walk LW-01..LW-27 once more and confirm each ID is either in a block, on a line in the app-level section, or genuinely clean.
 - The headline `Findings: <n>` is the number of `###` finding headers; lines in the app-level section are not counted. `Components audited` counts components only; the full-page routes go on the `Full-page routes:` line.
@@ -198,6 +199,7 @@ For each confirmed finding from Critical down to Low, in severity order (Info fi
 - Re-run the relevant check against the changed file. If it passes, the result is `pass`. If it does not, the result is `fail`: leave the edit in place, say what still fails, and do not try to undo it.
 - Leave the change uncommitted.
 - Never weaken or remove validation.
+- A fix may edit an existing file the pattern needs besides the flagged one: the component's own template, `config/livewire.php`, a service provider, the routes file. Name every file you changed in the summary. If the pattern needs a file that does not exist, or a change to a component that is not in the project (the component that receives a dispatched event, say), do not apply half of it: the finding is `needs-decision`. Never create a file.
 
 If a fix requires a product decision (which authorization policy applies, what the valid value set for a property is, whether an action should be reachable at all), do NOT guess. Edit nothing for that finding, record it as `needs-decision` with the question, and go on to the next finding. Ask the user the collected questions at the end.
 
@@ -210,6 +212,7 @@ Finish with a summary table:
 
 ## Reminders
 
-- Read-only mode writes exactly one file (the report). Fix mode additionally edits flagged source files. Nothing else. A run that stops in Step A or B (not a Livewire app, no components) writes no file.
+- Read-only mode writes exactly one file (the report). Fix mode additionally edits flagged source files and the existing files a fix pattern requires. Nothing else, and never a new file. A run that stops in Step A or B (not a Livewire app, no components) writes no file.
 - When you wrote a report, always end your reply by stating its exact path (`livewire-audit-YYYY-MM-DD.md` in the project root), so the user knows where to find it.
 - Never run git commands at any point. Leave all work uncommitted.
+- Never modify a database. Never run migrations or seeders.

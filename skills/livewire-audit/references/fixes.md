@@ -1,6 +1,6 @@
 # Livewire Security Fixes — Canonical Patterns
 
-Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > making a method protected > `#[Computed]` conversion > authorization insertion > restructure. Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, leave that finding unfixed and ask the user — never guess an authorization rule.
+Fix-mode ordering: apply the smallest sufficient fix, in this order: `#[Locked]` > making a method protected > `#[Computed]` conversion > authorization insertion > a larger rewrite of the component. Making a method protected is only a default fix when nothing on the client calls it; see "authorize-in-action". Never weaken validation to make a fix simpler. If the right policy or gate is ambiguous, leave that finding unfixed and ask the user — never guess an authorization rule.
 
 Each pattern below is referenced by name from `checklist.md`. The names are a fixed interface; do not rename them.
 
@@ -82,7 +82,7 @@ public function delete(): void
 }
 ```
 
-Make-protected variant — every public method is client-callable with no `wire:` directive referencing it. Change `public function recalculate()` to `protected function recalculate()` for helpers that must not be client-callable.
+Make-protected variant — every public method is client-callable with no `wire:` directive referencing it. Change `public function recalculate()` to `protected function recalculate()` for helpers that must not be client-callable. Apply it without asking only when nothing on the client calls the method: no `wire:` directive, no `$wire.recalculate()` in the component's view or script, and it is not a listener. If something does call it, whether the action should be reachable at all is the owner's decision — leave the finding unfixed and ask.
 
 Volt functional API: `$this->authorize(...)` works inside action closures (`Livewire\Volt\Component` extends `Livewire\Component`, and `$this` in a closure is the component). The make-protected variant is `protect()`: `$helper = protect(function () { ... });` makes the closure callable from other actions via `$this->helper()` but not from the client (Volt docs).
 
