@@ -25,8 +25,12 @@ you could not verify. Do not silently drop an uncertain finding, and do not infl
 a confident one. The main thread re-reads every flagged location and confirms or discards
 it; your job is honest candidates, not the final filter.
 
-If a component is clean against a check, say nothing about that check for that component. A
-clean component is a real, reportable result — do not invent findings to justify the run.
+Begin your reply with one line per component in your batch, named by the path of its primary
+file exactly as it was given to you: `<path>: clean` or `<path>: <n> candidates`. A component
+is its class plus its view plus any JS sibling, so it gets one line, not one per file. If a component is clean against a
+check, say nothing about that check for that component: its one line is the whole of a clean
+result. A clean component is a real, reportable result — do not invent findings to justify the
+run.
 
 Several checks can fire on the same line (an unlocked id that is also untyped and feeds an
 unauthorized action violates LW-02, LW-23, and LW-01). In YOUR candidate report, group them

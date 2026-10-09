@@ -90,7 +90,7 @@ Dispatch read-only Explore-type subagents in **batches of 5-10 components** (cou
 - the checklist. Preferred: give the subagent the ABSOLUTE PATH to `references/checklist.md` and require it to read the ENTIRE file (all LW checks) before auditing — subagents have Read access, and this keeps prompts small. Alternatively paste the full text verbatim. Either way: NEVER summarize, condense, or excerpt the checklist — condensation is how checks get silently dropped (it has caused real missed findings). Shrink the batch before you shrink the checklist;
 - the detected Livewire version, and whether Volt is installed;
 - the batch's file paths (class + view + any `.js`);
-- the required findings shape: `file`, `line`, `checkId` (LW-NN), `severity` (Critical/High/Medium/Low/Info), `evidence` (a quoted line from the file), `impact` (one sentence: what a user could change or see; no attack steps).
+- the reply shape, as a pointer and not a copy: tell the subagent to reply in the shape the checklist's "How to report" section defines. Do not restate or shorten that section's field list in the prompt — the checklist is its one definition.
 
 Tell each subagent:
 
@@ -102,7 +102,7 @@ Tell each subagent:
 
 First read `references/checklist.md` in full in the main conversation: the whole file, not its headings or excerpts. The gate, the app-level checks below and every finding's Fix line are judged against its entries; the one-line summaries in this step point at those entries and do not stand in for them.
 
-Nothing unverified reaches the report. For every finding returned by a subagent:
+Nothing unverified reaches the report. Check coverage first: every component you sent must be named in the opening lines of a reply (`<path>: clean` or `<path>: <n> candidates`, as the checklist requires). A component no reply names has not been audited — audit it before the report is written, and never list it as clean. Then, for every finding returned by a subagent:
 
 - **Re-read** the flagged file at the flagged location in the main conversation.
 - Confirm the quoted evidence actually exists at that location and the vulnerability logic holds.
@@ -176,7 +176,7 @@ Consolidation and counting rules — follow exactly:
 - Name every applicable check ID inside its block so each is traceable; nothing gets silently absorbed into another finding's prose. Before writing the report, walk LW-01..LW-27 once more and confirm each ID is either in a block, in an app-level note, or genuinely clean.
 - The headline `Findings: <n>` is the number of `###` finding headers. Components audited counts components; full-page routes that point at counted components are noted, not double-counted.
 
-Filenames containing the ⚡ prefix: write the literal character in the report. If your environment blocks emoji output, substitute the placeholder `[U+26A1]` and state that convention once at the top of the report.
+Write every `<file>` as its path from the project root; never shorten it or define a path convention of your own. Filenames containing the ⚡ prefix: write the literal character in the report. If your environment blocks emoji output, substitute the placeholder `[U+26A1]` and state that convention once at the top of the report.
 
 **"Nothing found" is a valid result.** If zero findings survive verification, say so plainly and list the audited inventory as evidence of coverage. Never pad the report or invent findings to justify the run.
 
