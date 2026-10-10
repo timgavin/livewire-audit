@@ -135,8 +135,8 @@ Version notes: the callable-surface rule is the same in v3 and v4, with two diff
 has no islands, so its magic methods are `__dispatch` and `__lazyLoad` only. And which
 lifecycle names are blocked from being called as actions depends on the release
 (SupportLifecycleHooks.php, `call()`, read at each release tag; snapshot-internals.md section
-5). Every release blocks `mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*` and
-`updated*`. Only Livewire 4.2.0 and later also block `boot`, `booted`, `rendering`, `rendered`
+5). Every release blocks `mount`, `hydrate*`, `dehydrate*`, `updating*` and `updated*`, and
+`exception` from v3.4.11 on. Only Livewire 4.2.0 and later also block `boot`, `booted`, `rendering`, `rendered`
 and a trait's `mount<Trait>`, `boot<Trait>` and `booted<Trait>` hooks. On every v3 release, and
 on v4 before 4.2.0, a public method with one of those names is client-callable like any other
 public method (a trait's public methods are on the callable surface too), so audit it as an
@@ -314,7 +314,8 @@ authorization and no validation the approval runs on an arbitrary record.
 Version notes: the `Livewire.dispatch` API and browser-dispatchable `#[On]` behavior are
 the same in v3 and v4. Two things depend on the release: `#[Authorize]` (4.3.0 and later,
 above), and from 4.4.1 (3.8.5 on v3) a listener must name one of the component's own public
-methods to be reachable at all (snapshot-internals.md section 5).
+methods, or a `$`-prefixed magic action, to be reachable at all (snapshot-internals.md
+section 5).
 
 Fix: see fixes.md "authorize-in-action"
 
@@ -853,17 +854,20 @@ snapshot-internals.md section 5).
   or a group around it, that calls `withoutMiddleware(...)` naming `web`, the session
   middleware or the CSRF middleware still runs without it, because Laravel removes excluded
   middleware after gathering the route's list (`Illuminate\Routing\Router::resolveMiddleware()`).
-  Report that exclusion on every release.
+  Report that exclusion on every release. One exception: an exclusion only removes the class
+  it names or a subclass of it, and on Laravel 13 the `web` group's CSRF middleware is
+  `PreventRequestForgery`, so excluding only the older `VerifyCsrfToken` or
+  `ValidateCsrfToken` class there removes nothing.
 - **Every v3 release, and v4 before 4.2.0,** add nothing: the route keeps exactly the
   middleware the callback gave it. A custom route whose middleware does not include `web` (or
   its own session and CSRF verification) has neither on every component update. Report it.
 - **Before 4.2.0 the default update route is never switched off.** From 4.2.0 it answers 404
-  once a custom route exists. On v3 (read at 3.6.1, 3.7.0, 3.8.0 and 3.8.10) and on v4.1.4 it is
-  registered when Livewire boots and keeps answering beside a custom route on any other path
-  or domain, so middleware placed only on the custom route (tenant scoping, an extra auth
-  gate) can be skipped by posting to the default one. Report that when the custom route
-  carries middleware the app depends on. (v4.0.0 to v4.1.0 register the default only when no
-  custom route was set, so there is nothing to report there.)
+  once a custom route exists. On v3 (read at 3.6.1, 3.7.0, 3.8.0 and 3.8.10) and on v4.1.1
+  to v4.1.4 it is registered when Livewire boots and keeps answering beside a custom route on
+  any other path or domain, so middleware placed only on the custom route (tenant scoping, an
+  extra auth gate) can be skipped by posting to the default one. Report that when the custom
+  route carries middleware the app depends on. (v4.0.0 to v4.1.0 register the default only
+  when no custom route was set, so there is nothing to report there.)
 - On any release: a custom route placed on an unexpected domain/prefix, or behind additional
   middleware that alters authentication/authorization for update requests.
 
@@ -891,7 +895,8 @@ Livewire::setUpdateRoute(fn ($handle) =>
     Route::post('/app/livewire/update', $handle)->middleware(['throttle:120,1'])
 );
 
-// any release: Livewire appends `web`, Laravel then removes what the route excludes
+// any release: the route runs without `web`. From 4.2.0 Livewire appends it, and Laravel
+// then removes what the route excludes; before 4.2.0 nothing added it in the first place
 Livewire::setUpdateRoute(fn ($handle) =>
     Route::post('/app/livewire/update', $handle)->withoutMiddleware(['web'])
 );
@@ -1005,10 +1010,11 @@ the action callable surface (LW-01 explicitly skips them, and they cannot be inv
 `$wire` actions; the exception is every v3 release and v4 before 4.2.0, where `boot()`,
 `booted()`, `rendering()`, `rendered()` and a trait's `mount<Trait>`/`boot<Trait>`/
 `booted<Trait>` are not blocked — see LW-01's version notes), which is exactly why they get
-missed. On releases before 4.4.1 (v3: before 3.8.5) a client can also make `boot()`,
-`mount()` and `booted()` run again through `__lazyLoad`, with the mount params of any lazy
-placeholder it was served (snapshot-internals.md, "Callable surface"), so a side effect there
-is not a once-per-page event. And `updated{Prop}`/`updating{Prop}`
+missed. A client can also make `boot()`, `mount()` and `booted()` run again through
+`__lazyLoad` (snapshot-internals.md, "Callable surface"), so a side effect there is not a
+once-per-page event: on any release a lazy component's placeholder can be submitted again,
+and before 4.4.1 (v3: before 3.8.5) the call works on any component, with the mount params
+of any lazy placeholder the client was served. And `updated{Prop}`/`updating{Prop}`
 fire on EVERY update to that property (every keystroke under `wire:model.live`), receiving the
 raw client value as the first argument. A side effect in the hook runs on untrusted input with
 none of an action's authorization.

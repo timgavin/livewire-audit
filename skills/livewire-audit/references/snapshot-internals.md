@@ -163,8 +163,12 @@ limited by a different mechanism, and only one of them protects its params:
   the component it was issued for, and the call is accepted at any time, so a client can make a
   component run `boot()`, `mount()` and `booted()` again (SupportLifecycleHooks.php, `mount()`)
   with the mount params of any lazy placeholder it was served. Releases from 4.4.1, and from
-  3.8.5 on v3, accept the blob only for the component it names, only while that component is
-  still a lazy placeholder, and only once (section 5).
+  3.8.5 on v3, accept the blob only when it was issued for a component of that name and the
+  snapshot submitted with it is still that component's lazy placeholder (section 5). That
+  narrows the call; it does not make it single-use. "Already loaded" is read from the
+  submitted snapshot and nothing is recorded server-side, so a client that kept the
+  placeholder snapshot can submit it again and the component mounts again with its own
+  params.
 - `__dispatch` is NOT checksum-protected. The event name and params come straight from the call.
   The name must match one of the component's registered listeners; any authorization attribute
   on that listener method is run; the method is then called with the client's params
@@ -180,7 +184,7 @@ All three are client-invokable endpoints beyond plain public methods. (v3 has th
 islands are a v4 feature.)
 
 **Lifecycle hooks are NOT on the callable surface, but they DO run on client input.** `mount`,
-`boot`, `booted`, `rendering`, `rendered`, `exception`, `hydrate*`/`dehydrate*`,
+`boot`, `booted`, `rendering`, `rendered`, `exception`, `scriptSrc`, `hydrate*`/`dehydrate*`,
 `updating*`/`updated*`, and a trait's `mount<Trait>`/`boot<Trait>`/`booted<Trait>` are blocked
 from being invoked as actions (SupportLifecycleHooks.php, `call()`). That is the v4.3.0 list.
 Every v3 release, and v4 before 4.2.0, block a shorter one that leaves `boot`, `booted`,
@@ -223,10 +227,16 @@ These differ between v3.8.10 and v4.3.0, and the checklist's version notes rely 
   `/livewire/update` when Livewire boots, unless an update route already exists, and it keeps
   answering beside a custom route on any other path or domain (a route on the very same method,
   domain and path replaces it; `Illuminate\Routing\RouteCollection::addToCollections()`). Middleware
-  placed only on the custom route therefore does not cover every update request on v3.
+  placed only on the custom route therefore does not cover every update request on v3. Within v4
+  before 4.2.0 it depends on the release: v4.0.0 to v4.1.0 register the default only if no custom
+  route was set by the time the app has booted, so there is no second route; v4.1.1 to v4.1.4
+  register it at boot, like v3.8.10, and never reject it.
 - **Endpoint paths.** v3 serves `/livewire/update` and `/livewire/upload-file`. v4 puts its
   endpoints under a per-app prefix, `/livewire-` plus eight hex characters derived from the app key
-  (src/Mechanisms/HandleRequests/EndpointResolver.php). The route names are the same.
+  (src/Mechanisms/HandleRequests/EndpointResolver.php). The upload route's name
+  (`livewire.upload-file`) and the `livewire.update` suffix given to a custom update route are the
+  same in both; the default update route's own name is not (`default.livewire.update` in v3.8.10,
+  `default-livewire.update` in v4.3.0).
 - **Checksum-failure rate limiting** (10 per IP per 600s) is v4 only. v3's Checksum.php throws
   `CorruptComponentPayloadException` and does nothing else.
 - **Model re-fetch on hydrate.** v4 on PHP 8.4 or later wraps it in a lazy proxy (IsLazy.php); v3,
@@ -239,13 +249,15 @@ These differ between v3.8.10 and v4.3.0, and the checklist's version notes rely 
   only, so a public `boot()`, `booted()`, `rendering()`, `rendered()` or trait hook of those three
   kinds is client-callable there (SupportLifecycleHooks.php, `call()`, in each). A trait's public
   methods count as the component's own for the callable surface: the allowlist leaves out only
-  static methods, `render`, and methods declared by the base `Livewire\Component` or
-  `Livewire\Volt\Component` class (src/Drawer/BaseUtils.php, `getPublicMethodsDefinedBySubClass()`).
+  static methods and methods declared by the base `Livewire\Component` or
+  `Livewire\Volt\Component` class (src/Drawer/BaseUtils.php, `getPublicMethodsDefinedBySubClass()`),
+  and then `render` (HandleComponents.php, `callMethods()`).
 - **Framework magic entry points.** v3 has `__dispatch` and `__lazyLoad`. Islands and
   `__lazyLoadIsland` are v4 only.
-- **`__lazyLoad` and `__dispatch` hardening.** v3.8.10 accepts a `__lazyLoad` blob only for the
-  component it names, only while that component is a lazy placeholder, and only once
-  (SupportLazyLoading.php, `call()` and `resurrectMountParams()`), and lets `__dispatch` reach only
+- **`__lazyLoad` and `__dispatch` hardening.** v3.8.10 accepts a `__lazyLoad` blob only when it
+  was issued for a component of that name and the snapshot submitted with it is that component's
+  lazy placeholder (SupportLazyLoading.php, `hydrate()`, `call()` and `resurrectMountParams()`;
+  replaying the placeholder snapshot is still possible), and lets `__dispatch` reach only
   a listener whose method is one of the component's own public methods or a `$`-prefixed magic
   action (SupportEvents.php). v4.3.0 has neither check. Here v3.8.10 is the stricter one; v4 gained
   both in 4.4.1.
@@ -254,7 +266,7 @@ These differ between v3.8.10 and v4.3.0, and the checklist's version notes rely 
 - **A wrong-type value on a typed property.** Both reject the value, answering 419 in production
   and re-throwing the `TypeError` in debug. v4.3.0 does it inside
   `setComponentPropertyAwareOfTypes()` (HandleComponents.php); v3.8.10 re-throws there and converts
-  it one frame up, in `HandleRequests::handleUpdate()`. Section 6 describes v4.
+  it at the top of the call, in `HandleRequests::handleUpdate()`. Section 6 describes v4.
 - **Routing and layout.** `Route::livewire()`, single-file and multi-file components, and the
   optional, purely-cosmetic high-voltage filename prefix are v4 only.
 
@@ -270,8 +282,8 @@ change. An audit treats a protection as absent when the app's release is older t
 | `boot`, `booted`, `rendering`, `rendered` and a trait's `mount<Trait>`/`boot<Trait>`/`booted<Trait>` blocked as actions | no | 4.2.0 |
 | `#[Authorize]` exists and is run on the `__dispatch` path | no | 4.3.0 |
 | A wrong-type value answers 419 in production instead of surfacing the `TypeError` | 3.8.0 | 4.2.0 |
-| `__lazyLoad` bound to its component, to the placeholder state and to one use | 3.8.5 | 4.4.1 |
-| `__dispatch` listener must name one of the component's own public methods | 3.8.5 | 4.4.1 |
+| `__lazyLoad` accepted only for the component name it was issued for, and only with a placeholder snapshot | 3.8.5 | 4.4.1 |
+| `__dispatch` listener must name one of the component's own public methods or a `$`-prefixed magic action | 3.8.5 | 4.4.1 |
 | Checksum-failure rate limiter | no | 4.0.0 |
 
 "no" means absent in v3.8.10, the last v3 release when this was checked. Each release named is the
