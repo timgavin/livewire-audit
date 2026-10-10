@@ -26,13 +26,14 @@ Confirm Livewire is installed and read its config. Run:
 
 ```
 grep -o '"livewire/livewire"[^,}]*' composer.json
+grep -A1 '"name": "livewire/livewire"' composer.lock 2>/dev/null
 grep -o '"livewire/volt"[^,}]*' composer.json
 ls config/livewire.php 2>/dev/null && grep -nE "component_locations|component_namespaces|class_namespace|class_path|view_path" config/livewire.php
 ```
 
 If `livewire/livewire` is absent from `composer.json`, tell the user this is not a Livewire app and stop. Note whether `livewire/volt` is present — Volt runs on both major versions (its composer constraint is `livewire/livewire: ^3.6.1|^4.0`) and adds component forms with their own discovery searches in Step B. If `config/livewire.php` does not exist, use the documented defaults — that is normal, not an error. A directory a later step greps (`routes/`, `app/Providers/`) that does not exist makes its checks not-applicable; record that in the report rather than failing.
 
-Note the major version (v3 vs v4) — it determines the v3-vs-v4 notes in the checklist, though the security model is substantively identical. Record `component_locations`, `component_namespaces`, `class_namespace`, `class_path` and `view_path` if they deviate from defaults (`resources/views/components` and `resources/views/livewire`; `pages` and `layouts` under `resources/views/`; `App\Livewire`; `app/Livewire`; `resources/views/livewire`). Step B searches a configured directory as well as the defaults.
+Note the major version (v3 vs v4) and the exact release. The exact release is the `version` line `composer.lock` gives for `livewire/livewire`. With no lock file, take the lowest release the `composer.json` constraint allows (`^4.0` is audited as 4.0.0) and say in the report that it was inferred. Both matter: the trust boundary is the same across versions, but several protections arrived partway through a major version, and the checklist's version notes and `references/snapshot-internals.md` section 5 name the first release that has each. Treat a protection as absent when the app's release is older than that; never rely on one because the app is "on v4". Record `component_locations`, `component_namespaces`, `class_namespace`, `class_path` and `view_path` if they deviate from defaults (`resources/views/components` and `resources/views/livewire`; `pages` and `layouts` under `resources/views/`; `App\Livewire`; `app/Livewire`; `resources/views/livewire`). Step B searches a configured directory as well as the defaults.
 
 ## Step B: Build the component inventory
 
@@ -88,7 +89,7 @@ State the inventory to the user as two counts: components (class-based + SFC/MFC
 Dispatch read-only Explore-type subagents in **batches of 5-10 components** (count components, not files — one component = its class plus view plus any JS sibling), running batches in parallel. Each subagent prompt must include:
 
 - the checklist. Preferred: give the subagent the ABSOLUTE PATH to `references/checklist.md` and require it to read the ENTIRE file (all LW checks) before auditing — subagents have Read access, and this keeps prompts small. Alternatively paste the full text verbatim. Either way: NEVER summarize, condense, or excerpt the checklist — condensation is how checks get silently dropped (it has caused real missed findings). Shrink the batch before you shrink the checklist;
-- the detected Livewire version, and whether Volt is installed;
+- the detected Livewire release (exact, or the inferred lowest, saying which), and whether Volt is installed;
 - the batch's file paths (class + view + any `.js`);
 - the reply shape, as a pointer and not a copy: tell the subagent to reply in the shape the checklist's "How to report" section defines. Do not restate or shorten that section's field list in the prompt — the checklist is its one definition.
 
@@ -114,7 +115,7 @@ Then run the **app-level checks** in the main thread (these span the whole app, 
 - **LW-12** — morph map / model alias registration in service providers (search `app/Providers/` for `enforceMorphMap`, `morphMap`, `Relation::morphMap`). The subagents' notes on which components hold Eloquent models tell you which class names are exposed.
 - **LW-14** — global upload rules in `config/livewire.php` (`temporary_file_upload` rules / max size / mimes).
 - **LW-20** — `Livewire::addPersistentMiddleware(...)` registration in providers.
-- **LW-21** — `Livewire::setUpdateRoute(...)` (custom update endpoint and its middleware).
+- **LW-21** — `Livewire::setUpdateRoute(...)` (custom update endpoint, its middleware and anything it excludes with `withoutMiddleware`), judged against the app's exact release; and CSRF exemptions that cover the update path (search `bootstrap/app.php`, `app/Http/Middleware/` and `app/Providers/` for `validateCsrfTokens`, `preventRequestForgery`, `$except` and `::except(`).
 - **LW-22** — middleware applied to full-page component routes (cross-reference the routes enumerated in Step B).
 
 Confirm each against actual code before it becomes a finding.
@@ -163,6 +164,7 @@ Fix: <specific change, referencing the fixes.md pattern(s)>
 
 ## App-level checks and run notes
 LW-NN: clean - <what you checked> | not applicable - <reason>
+Livewire release: <x.y.z> from composer.lock | <x.y.z> inferred from <constraint>, no lock file - <protections it predates, or "has every release-dependent protection">
 Dynamic verification: skipped - <reason> | performed against <page>
 Full-page routes: <n> point at audited components
 
@@ -175,7 +177,7 @@ Full-page routes: <n> point at audited components
 
 Repeat the finding block per severity tier (Critical, High, Medium, Low, Info). Order findings within a tier by severity of impact.
 
-`## App-level checks and run notes` is where a result that is not a finding goes. Write one `LW-NN:` line for each main-thread check from Step D (LW-12, LW-14, LW-20, LW-21, LW-22) that has such a result: `clean` with what you checked (a default left in place, a route that is public by design), or `not applicable` with the reason (a missing `routes/` or `app/Providers/` directory). A check can have blocks above and a line here. A result that asks nothing of the owner is a line here, never an Info block. Then write the two fixed lines. Nothing else goes in this section, and none of its lines is a finding.
+`## App-level checks and run notes` is where a result that is not a finding goes. Write one `LW-NN:` line for each main-thread check from Step D (LW-12, LW-14, LW-20, LW-21, LW-22) that has such a result: `clean` with what you checked (a default left in place, a route that is public by design), or `not applicable` with the reason (a missing `routes/` or `app/Providers/` directory). A check can have blocks above and a line here. A result that asks nothing of the owner is a line here, never an Info block. Then write the three fixed lines. The `Livewire release:` line names the release you audited against and where it came from, then each protection in `references/snapshot-internals.md` section 5's first-release table that the release is too old to have, with the release that adds it (for example `4.1.4 from composer.lock - predates 4.2.0 (forced web and header guard on custom update routes, default update route retired, boot/booted/rendering/rendered and trait hooks blocked as actions), 4.3.0 (#[Authorize]), 4.4.1 (__lazyLoad and __dispatch hardening)`). Nothing else goes in this section, and none of its lines is a finding.
 
 Consolidation and counting rules — follow exactly:
 

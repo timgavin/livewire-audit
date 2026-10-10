@@ -3,7 +3,9 @@
 Facts verified against Livewire v4.3.0 source and official 3.x/4.x docs, 2026-06-11. Citations are
 short parentheticals against the Livewire v4.3.0 tree (`vendor/livewire/livewire/`). Where Livewire 3
 behaves differently, section 5 says how; those differences were checked against the v3.8.10 source,
-2026-10-08.
+2026-10-08. Several protections arrived partway through a major version; section 5 also lists the
+first release that has each, read tag by tag on 2026-10-09. A statement here about "v4" or "v3" that
+names no release holds for v4.3.0 and v3.8.10 and has not been checked against every other release.
 
 This is the reference for what a Livewire component puts in front of the client, what of that is
 readable in page source, and what a client can change. If you are auditing a Livewire app, this is
@@ -14,7 +16,7 @@ the trust boundary.
 Every Livewire component renders a `wire:snapshot` attribute into the HTML it returns. It is a JSON
 object embedded in page source — fully readable, no auth required to read it
 (src/Mechanisms/HandleComponents/HandleComponents.php emits `'wire:snapshot' => $snapshot`). It has
-three top-level keys (HandleComponents.php, `toSnapshot()`):
+three top-level keys (HandleComponents.php, `snapshot()`):
 
 - **`data`** — every public property defined on the component subclass, in dehydrated form. This is
   the part that leaks data (see section 2).
@@ -70,10 +72,12 @@ Models and Eloquent collections are re-fetched on the next hydrate, not restored
 `ModelSynth::hydrate()` runs `newQueryForRestoration($key)->useWritePdo()->firstOrFail()`
 (src/Features/SupportModels/ModelSynth.php). Two consequences worth flagging in an audit:
 
-- **`firstOrFail()` on hydrate** — in v4 the re-fetch is wrapped in a lazy proxy, so a
-  deleted/inaccessible row throws when the property is first accessed (lazily) on the next request,
-  not silently — but a component that never touches the property that request will not trigger the
-  throw. v3 runs the query during hydration on every request, so there it always throws.
+- **`firstOrFail()` on hydrate** — v3 runs the query during hydration on every request, so a
+  deleted/inaccessible row always throws there. v4 does the same on PHP 8.1 to 8.3. On PHP 8.4 and
+  later v4 wraps the re-fetch in a lazy proxy (src/Features/SupportModels/IsLazy.php,
+  `makeLazyProxy()`, which returns the query result directly when `PHP_VERSION_ID < 80400`), so the
+  row is fetched, and a missing one throws, only when the property is first touched — a component
+  that never touches the property that request will not trigger the throw.
 - **Query constraints are not re-applied.** If the property was assigned from a `select(...)`- or
   `where(...)`-narrowed query, hydrate re-loads the full row by primary key with no constraint
   (ModelSynth.php). See section 3(d).
@@ -154,12 +158,20 @@ limited by a different mechanism, and only one of them protects its params:
 
 - `__lazyLoad` takes an encoded snapshot and passes it through `fromSnapshot()`, whose first
   step is `Checksum::verify()` (SupportLazyLoading.php `resurrectMountParams()`;
-  HandleComponents.php `fromSnapshot()`). Its mount params are integrity-protected.
+  HandleComponents.php `fromSnapshot()`). The checksum proves the server issued those mount
+  params; a client cannot forge them. In v4.3.0 that is the only check: the blob is not tied to
+  the component it was issued for, and the call is accepted at any time, so a client can make a
+  component run `boot()`, `mount()` and `booted()` again (SupportLifecycleHooks.php, `mount()`)
+  with the mount params of any lazy placeholder it was served. Releases from 4.4.1, and from
+  3.8.5 on v3, accept the blob only for the component it names, only while that component is
+  still a lazy placeholder, and only once (section 5).
 - `__dispatch` is NOT checksum-protected. The event name and params come straight from the call.
   The name must match one of the component's registered listeners; any authorization attribute
   on that listener method is run; the method is then called with the client's params
   (SupportEvents.php). Reach is limited to listener methods, the payload is not limited at all —
-  see checklist LW-05.
+  see checklist LW-05. v4.3.0 does not check which method a listener names; releases from 4.4.1,
+  and from 3.8.5 on v3, require it to be one of the component's own public methods or a
+  `$`-prefixed magic action (section 5).
 - `__lazyLoadIsland` reads the island name from the call metadata and is limited by the
   server-side `getIslands()` allowlist (the named island must already exist on the component),
   not by the checksum (SupportIslands.php).
@@ -168,9 +180,11 @@ All three are client-invokable endpoints beyond plain public methods. (v3 has th
 islands are a v4 feature.)
 
 **Lifecycle hooks are NOT on the callable surface, but they DO run on client input.** `mount`,
-`boot`/`booted`, `hydrate*`/`dehydrate*`, and `updating*`/`updated*` are in `$protectedMethods`
-(SupportLifecycleHooks.php) so they cannot be invoked as actions (v3's list is shorter and leaves
-`boot`/`booted` callable; see section 5) — but `updating{Prop}`/
+`boot`, `booted`, `rendering`, `rendered`, `exception`, `hydrate*`/`dehydrate*`,
+`updating*`/`updated*`, and a trait's `mount<Trait>`/`boot<Trait>`/`booted<Trait>` are blocked
+from being invoked as actions (SupportLifecycleHooks.php, `call()`). That is the v4.3.0 list.
+Every v3 release, and v4 before 4.2.0, block a shorter one that leaves `boot`, `booted`,
+`rendering`, `rendered` and the trait hooks callable (section 5) — but `updating{Prop}`/
 `updated{Prop}` fire on every property update (every keystroke under `wire:model.live`) with the raw
 client value passed in. A write or authorization decision inside such a hook runs on untrusted input
 with none of the action-level scrutiny. See checklist LW-24.
@@ -181,7 +195,7 @@ server data to the browser and are invisible to a snapshot-only audit: the `disp
 the `xjs` effect (every `$this->js()` expression, evaluated as JavaScript client-side — see LW-25).
 Audit those alongside the snapshot.
 
-## 5. v3 vs v4
+## 5. v3 vs v4, and release to release
 
 The trust boundary is the same in Livewire 3 and Livewire 4. These were compared in the v3.8.10
 source against v4.3.0 and match: the snapshot's `data`/`memo`/`checksum` shape and the HMAC over it
@@ -191,30 +205,81 @@ refuse, `#[Locked]` (including deep writes under a locked name), the callable-su
 persistent-middleware list, the `cache:` and `persist:` computed keys and the 3600-second default,
 the temporary-upload defaults, and the `dispatches` and `xjs` effects.
 
-These differ, and the checklist's version notes rely on them:
+These differ between v3.8.10 and v4.3.0, and the checklist's version notes rely on them:
 
-- **`setUpdateRoute()`.** v4 adds the Livewire header guard and the `web` group to whatever route
-  the callback returns. v3 adds nothing: the route keeps exactly the middleware the callback gave it
-  (src/Mechanisms/HandleRequests/HandleRequests.php in each). On v3 a custom update route without
-  `web` has no session and no CSRF verification. See checklist LW-21.
+- **`setUpdateRoute()`.** v4.3.0 appends the Livewire header guard to whatever route the callback
+  returns, and appends the `web` group when the callback left it out. v3 adds nothing: the route
+  keeps exactly the middleware the callback gave it (src/Mechanisms/HandleRequests/HandleRequests.php
+  in each). On v3 a custom update route without `web` has no session and no CSRF verification.
+  Appending is all v4 does. It never touches the route's excluded middleware, and Laravel removes
+  excluded middleware after it has gathered the route's list, expanding group names as it goes
+  (`Illuminate\Routing\Router::resolveMiddleware()`, read in Laravel 10.x to 13.x). So a custom
+  route, or a group around it, that calls `withoutMiddleware(...)` naming `web`, the session
+  middleware or the CSRF middleware still runs without it on every release. See checklist LW-21.
+- **The header guard** (`RequireLivewireHeaders`, v4 only) answers 404 unless the request carries
+  an `X-Livewire` header and a JSON content type. v3 has no such middleware.
+- **The default update route once a custom one exists.** v4.3.0 answers 404 on the default route
+  (HandleRequests.php, `handleUpdate()`). v3 never rejects it: v3.8.10 registers
+  `/livewire/update` when Livewire boots, unless an update route already exists, and it keeps
+  answering beside a custom route on any other path or domain (a route on the very same method,
+  domain and path replaces it; `Illuminate\Routing\RouteCollection::addToCollections()`). Middleware
+  placed only on the custom route therefore does not cover every update request on v3.
+- **Endpoint paths.** v3 serves `/livewire/update` and `/livewire/upload-file`. v4 puts its
+  endpoints under a per-app prefix, `/livewire-` plus eight hex characters derived from the app key
+  (src/Mechanisms/HandleRequests/EndpointResolver.php). The route names are the same.
 - **Checksum-failure rate limiting** (10 per IP per 600s) is v4 only. v3's Checksum.php throws
   `CorruptComponentPayloadException` and does nothing else.
-- **Model re-fetch on hydrate.** v4 wraps it in a lazy proxy and reuses a route-bound model; v3
-  runs `firstOrFail()` during hydration on every request (ModelSynth.php in each).
-- **Lifecycle methods that cannot be called as actions.** v4: `mount`, `boot`, `booted`,
-  `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`, `rendering`, `rendered`. v3:
-  `mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*` only, so a public
-  `boot()`, `booted()`, `rendering()` or `rendered()` is client-callable there
-  (SupportLifecycleHooks.php in each).
+- **Model re-fetch on hydrate.** v4 on PHP 8.4 or later wraps it in a lazy proxy (IsLazy.php); v3,
+  and v4 on older PHP, run `firstOrFail()` during hydration on every request (ModelSynth.php in
+  each).
+- **Lifecycle methods that cannot be called as actions.** v4.3.0: `mount`, `boot`, `booted`,
+  `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`, `rendering`, `rendered`,
+  `scriptSrc`, and for every trait the component uses `mount<Trait>`, `boot<Trait>` and
+  `booted<Trait>`. v3: `mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`
+  only, so a public `boot()`, `booted()`, `rendering()`, `rendered()` or trait hook of those three
+  kinds is client-callable there (SupportLifecycleHooks.php, `call()`, in each). A trait's public
+  methods count as the component's own for the callable surface: the allowlist leaves out only
+  static methods, `render`, and methods declared by the base `Livewire\Component` or
+  `Livewire\Volt\Component` class (src/Drawer/BaseUtils.php, `getPublicMethodsDefinedBySubClass()`).
 - **Framework magic entry points.** v3 has `__dispatch` and `__lazyLoad`. Islands and
   `__lazyLoadIsland` are v4 only.
-- **Authorization attribute.** `#[Authorize]` exists in v4 only, and v4 runs it on the `__dispatch`
-  path before the listener is called (SupportEvents.php). v3 has no such attribute.
-- **A wrong-type value on a typed property.** v4 turns the `TypeError` into `abort(419)` in
-  production; v3 re-throws it (HandleComponents.php, `setComponentPropertyAwareOfTypes()`). Both
-  reject the value. Section 6 describes v4.
+- **`__lazyLoad` and `__dispatch` hardening.** v3.8.10 accepts a `__lazyLoad` blob only for the
+  component it names, only while that component is a lazy placeholder, and only once
+  (SupportLazyLoading.php, `call()` and `resurrectMountParams()`), and lets `__dispatch` reach only
+  a listener whose method is one of the component's own public methods or a `$`-prefixed magic
+  action (SupportEvents.php). v4.3.0 has neither check. Here v3.8.10 is the stricter one; v4 gained
+  both in 4.4.1.
+- **Authorization attribute.** `#[Authorize]` exists in v4 only, and v4.3.0 runs it on the
+  `__dispatch` path before the listener is called (SupportEvents.php). v3 has no such attribute.
+- **A wrong-type value on a typed property.** Both reject the value, answering 419 in production
+  and re-throwing the `TypeError` in debug. v4.3.0 does it inside
+  `setComponentPropertyAwareOfTypes()` (HandleComponents.php); v3.8.10 re-throws there and converts
+  it one frame up, in `HandleRequests::handleUpdate()`. Section 6 describes v4.
 - **Routing and layout.** `Route::livewire()`, single-file and multi-file components, and the
   optional, purely-cosmetic high-voltage filename prefix are v4 only.
+
+**First release that has each protection.** A fact stated above for v4.3.0 or v3.8.10 is a fact
+about that release, not about every release of its major version. The protections below arrived
+partway through, found by reading the same source file at each release tag on either side of the
+change. An audit treats a protection as absent when the app's release is older than the one named.
+
+| Protection | v3 | v4 |
+| --- | --- | --- |
+| `setUpdateRoute()` appends `web` and the header guard to a custom route | no | 4.2.0 |
+| Default update route answers 404 once a custom route exists | no | 4.2.0 |
+| `boot`, `booted`, `rendering`, `rendered` and a trait's `mount<Trait>`/`boot<Trait>`/`booted<Trait>` blocked as actions | no | 4.2.0 |
+| `#[Authorize]` exists and is run on the `__dispatch` path | no | 4.3.0 |
+| A wrong-type value answers 419 in production instead of surfacing the `TypeError` | 3.8.0 | 4.2.0 |
+| `__lazyLoad` bound to its component, to the placeholder state and to one use | 3.8.5 | 4.4.1 |
+| `__dispatch` listener must name one of the component's own public methods | 3.8.5 | 4.4.1 |
+| Checksum-failure rate limiter | no | 4.0.0 |
+
+"no" means absent in v3.8.10, the last v3 release when this was checked. Each release named is the
+first whose tag has the code: absent at v4.1.4 and present at v4.2.0 (the 4.2.0 release notes list
+the update-route, header and lifecycle changes); absent at v4.2.4 and present at v4.3.0; absent at
+v3.7.15 and present at v3.8.0; absent at v3.8.4 and v4.4.0 and present at v3.8.5 and v4.4.1. One
+consequence of the `#[Authorize]` row: PHP skips an attribute whose class does not exist without
+raising an error, so on a release before 4.3.0 the attribute on a method does nothing at all.
 
 ## 6. Type-mismatch behavior
 

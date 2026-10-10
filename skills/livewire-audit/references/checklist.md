@@ -5,6 +5,12 @@ with version notes and a batch of component file paths. Read each component's cl
 view (plus the JS file for v4 multi-file components), then work every check below against
 the code in front of you.
 
+You are also told the app's Livewire release: the exact one, or the lowest release its
+composer constraint allows when there is no lock file. Several protections arrived partway
+through a major version. Where a check's version notes name the first release that has a
+protection, treat the protection as absent on any older release; "v4" alone is not enough to
+rely on it.
+
 ## How to report
 
 Report only what you can quote from the code you were given. Do not infer behavior from
@@ -125,13 +131,16 @@ Why exploitable: the attacker opens devtools on any page mounting this component
 `$wire.deletePost(7)` with an ID they do not own, and — with no UI gate and no server-side
 ownership/policy check — the delete runs.
 
-Version notes: the callable-surface rule is the same in v3 and v4, with two differences
-checked against the v3.8.10 source. v3 has no islands, so its magic methods are `__dispatch`
-and `__lazyLoad` only. And v3 protects fewer lifecycle names from being called as actions:
-`mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*`, `updated*`. A public `boot()`,
-`booted()`, `rendering()` or `rendered()` on a v3 component is client-callable like any other
-public method (v4 blocks those too; SupportLifecycleHooks.php in each), so on v3 audit them as
-actions. v4 adds single-file and multi-file layouts, so also inspect the embedded `new class
+Version notes: the callable-surface rule is the same in v3 and v4, with two differences. v3
+has no islands, so its magic methods are `__dispatch` and `__lazyLoad` only. And which
+lifecycle names are blocked from being called as actions depends on the release
+(SupportLifecycleHooks.php, `call()`, read at each release tag; snapshot-internals.md section
+5). Every release blocks `mount`, `exception`, `hydrate*`, `dehydrate*`, `updating*` and
+`updated*`. Only Livewire 4.2.0 and later also block `boot`, `booted`, `rendering`, `rendered`
+and a trait's `mount<Trait>`, `boot<Trait>` and `booted<Trait>` hooks. On every v3 release, and
+on v4 before 4.2.0, a public method with one of those names is client-callable like any other
+public method (a trait's public methods are on the callable surface too), so audit it as an
+action. v4 adds single-file and multi-file layouts, so also inspect the embedded `new class
 extends Component` block, not only `app/Livewire/` classes.
 
 When the unauthorized method is also referenced by NO `wire:` directive anywhere in the
@@ -279,11 +288,15 @@ and validate every field. Dynamic event names (`#[On('post.{postId}')]` / `'orde
 'refresh'`) resolve the `{placeholder}` from component state, so a client-writable property
 in the placeholder lets the attacker influence which events bind — audit those too.
 
-Precision note (v4 only): a listener method that carries Livewire's authorization attribute,
-`#[Authorize('update', 'post')]`, IS checked by the dispatch path (verified,
-src/Features/SupportEvents/SupportEvents.php), so do not flag it as unauthorized; the gap is
-a listener relying on an in-body Gate call that is absent, or no check at all. v3 has no
-such attribute (checked against v3.8.10), so on v3 only an in-body check counts.
+Precision note (Livewire 4.3.0 and later only): a listener method that carries Livewire's
+authorization attribute, `#[Authorize('update', 'post')]`, IS checked by the dispatch path
+(verified, src/Features/SupportEvents/SupportEvents.php), so do not flag it as unauthorized;
+the gap is a listener relying on an in-body Gate call that is absent, or no check at all. The
+attribute does not exist on any v3 release or on v4 before 4.3.0 (src/Attributes/Authorize.php
+is absent at v3.8.10 and v4.2.4), and PHP skips an attribute whose class is missing without
+raising an error. On those releases a method carrying `#[Authorize]` is unguarded, on the
+dispatch path and as a plain action alike: only an in-body check counts, and an attribute that
+is the method's only guard is itself the finding (LW-01 for an action, LW-05 for a listener).
 
 ```php
 #[On('post-approved')]
@@ -298,8 +311,10 @@ Why exploitable: the attacker runs `Livewire.dispatch('post-approved', {postId: 
 Livewire routes the event to the listener with the attacker's payload, and with no
 authorization and no validation the approval runs on an arbitrary record.
 
-Version notes: identical in v3 and v4; the `Livewire.dispatch` API and browser-
-dispatchable `#[On]` behavior are unchanged.
+Version notes: the `Livewire.dispatch` API and browser-dispatchable `#[On]` behavior are
+the same in v3 and v4. Two things depend on the release: `#[Authorize]` (4.3.0 and later,
+above), and from 4.4.1 (3.8.5 on v3) a listener must name one of the component's own public
+methods to be reachable at all (snapshot-internals.md section 5).
 
 Fix: see fixes.md "authorize-in-action"
 
@@ -575,7 +590,8 @@ for a file. Two distinct gates, check BOTH:
 - per-property `#[Validate('image|mimes:...|max:...')]` or a `rules()` entry — this gates
   what gets stored on the component's validate/update cycle;
 - the GLOBAL `temporary_file_upload.rules` in `config/livewire.php` — this is the ONLY
-  thing that gates the temporary-upload POST endpoint (`livewire/upload-file`). Its default
+  thing that gates the temporary-upload POST endpoint (route name `livewire.upload-file`:
+  `/livewire/upload-file` on v3, `/livewire-<hash>/upload-file` on v4). Its default
   is `['required','file','max:12288']` (verified,
   src/Features/SupportFileUploads/FileUploadConfiguration.php, `rules()`): 12 MB and ANY
   MIME type. So a property-level
@@ -600,9 +616,10 @@ script, an executable, anything up to the global size cap, 12 MB by default) bec
 `mimes`/`max` rule constrains it — enabling, depending on how the stored file is served or processed, content-policy
 bypass, storage exhaustion, or code execution.
 
-Version notes: identical in v3 and v4; `WithFileUploads`, `#[Validate]`, and the global
-`config/livewire.php` upload rules work the same. The temp-endpoint-vs-property-rule split
-also applies to both versions.
+Version notes: the same in v3 and v4 apart from the endpoint's path (v4 serves it under a
+per-app `/livewire-<hash>` prefix; EndpointResolver.php). `WithFileUploads`, `#[Validate]`,
+and the global `config/livewire.php` upload rules work the same. The
+temp-endpoint-vs-property-rule split also applies to both versions.
 
 Fix: see fixes.md "upload-rules"
 
@@ -814,44 +831,84 @@ Fix: see fixes.md "persistent-middleware"
 
 ## LW-21: Update route exposure
 
-Severity guidance: almost always Info for a customized route. Escalate to Low/Medium only
-for a genuinely odd customization (custom route on the wrong domain or prefix, or wrapped in
-an extra middleware group that changes the auth context). High on v3 when the custom route
-leaves out `web` (see below). An app that does not customize the route has no finding here.
+Severity guidance: High when component updates run with no session or no CSRF verification
+and the release has no header guard to fall back on (every v3 release, v4 before 4.2.0).
+Medium for the same on Livewire 4.2.0 and later, where the header guard still turns away a
+request that lacks the `X-Livewire` header or a JSON content type. Medium when middleware the
+app relies on for access control or tenancy sits only on a custom update route and the
+release leaves the default route answering beside it. Low or Info for other odd
+customizations (custom route on the wrong domain or prefix, or wrapped in an extra middleware
+group that changes the auth context). An app that neither customizes the route nor exempts it
+from CSRF verification has no finding here.
 
-Look for: customizations to the Livewire update endpoint via `Livewire::setUpdateRoute(...)`.
-What a customization can break depends on the major version (verified,
-src/Mechanisms/HandleRequests/HandleRequests.php in v4.3.0 and v3.8.10):
+Look for two things. The app's exact Livewire release decides the first (verified,
+src/Mechanisms/HandleRequests/HandleRequests.php at v3.8.10, v4.1.4, v4.2.0 and v4.3.0;
+snapshot-internals.md section 5).
 
-- **On v4,** do NOT report "the custom route dropped `web` so CSRF/session is lost": that is
-  not achievable. `setUpdateRoute()` force-injects the `web` group and the Livewire header
-  guard onto whatever route the callback returns, even if you omit them. The only real
-  findings are the custom route placed on an unexpected domain/prefix, or behind additional
+1. Customizations to the update endpoint via `Livewire::setUpdateRoute(...)`:
+
+- **Livewire 4.2.0 and later** append the `web` group and the Livewire header guard to the
+  route the callback returns when the callback left them out. On these releases do NOT report
+  a custom route merely for leaving `web` out. Appending is all the framework does: a route,
+  or a group around it, that calls `withoutMiddleware(...)` naming `web`, the session
+  middleware or the CSRF middleware still runs without it, because Laravel removes excluded
+  middleware after gathering the route's list (`Illuminate\Routing\Router::resolveMiddleware()`).
+  Report that exclusion on every release.
+- **Every v3 release, and v4 before 4.2.0,** add nothing: the route keeps exactly the
+  middleware the callback gave it. A custom route whose middleware does not include `web` (or
+  its own session and CSRF verification) has neither on every component update. Report it.
+- **Before 4.2.0 the default update route is never switched off.** From 4.2.0 it answers 404
+  once a custom route exists. On v3 (read at 3.6.1, 3.7.0, 3.8.0 and 3.8.10) and on v4.1.4 it is
+  registered when Livewire boots and keeps answering beside a custom route on any other path
+  or domain, so middleware placed only on the custom route (tenant scoping, an extra auth
+  gate) can be skipped by posting to the default one. Report that when the custom route
+  carries middleware the app depends on. (v4.0.0 to v4.1.0 register the default only when no
+  custom route was set, so there is nothing to report there.)
+- On any release: a custom route placed on an unexpected domain/prefix, or behind additional
   middleware that alters authentication/authorization for update requests.
-- **On v3,** `setUpdateRoute()` adds nothing: the route keeps exactly the middleware the
-  callback gave it. A custom route whose middleware does not include `web` (or its own
-  session and CSRF verification) has neither on every component update. Report it, High.
-  The domain/prefix and extra-middleware findings apply as on v4.
 
-If there is no `setUpdateRoute` call at all, the default is safe. That is a clean result,
-not a finding: the report records it as one line in its app-level section ("LW-21: clean -
-default update route, no customization").
+2. A CSRF exemption that covers the update path, on any release: an `except` list passed to
+   `validateCsrfTokens(...)` or `preventRequestForgery(...)` in `bootstrap/app.php`, an
+   `$except` property on the app's `VerifyCsrfToken` middleware, or a
+   `VerifyCsrfToken::except(...)` call, with an entry that matches the update route. The
+   default path is `/livewire/update` on v3 and `/livewire-<hash>/update` on v4
+   (EndpointResolver.php), so `livewire/*` matches v3's and `livewire*` or `*` matches both; a
+   custom route is matched by its own path. An exemption for some other path is not a finding
+   here.
+
+If there is no `setUpdateRoute` call and no such exemption, the default is safe. That is a
+clean result, not a finding: the report records it as one line in its app-level section
+("LW-21: clean - default update route, no customization").
 
 ```php
 // AppServiceProvider — a real (narrow) finding: custom route on a different host
 Livewire::setUpdateRoute(fn ($handle) =>
     Route::post('/lw/update', $handle)->domain('internal.example.com')  // different auth context
 );
+
+// v3, or v4 before 4.2.0: nothing adds `web`, so no session and no CSRF check on any update
+Livewire::setUpdateRoute(fn ($handle) =>
+    Route::post('/app/livewire/update', $handle)->middleware(['throttle:120,1'])
+);
+
+// any release: Livewire appends `web`, Laravel then removes what the route excludes
+Livewire::setUpdateRoute(fn ($handle) =>
+    Route::post('/app/livewire/update', $handle)->withoutMiddleware(['web'])
+);
 ```
 
-Why exploitable (when it is): a custom update route on a different domain or middleware group
-can land in an auth context the rest of the app does not expect. On v4 the framework
-guarantees `web` and the header guard regardless, so CSRF/session are not the vector there —
-the misrouting is. On v3 nothing is guaranteed, so a route without `web` takes every
-component update with no CSRF check.
+Why exploitable (when it is): every component action in the app arrives through the update
+route. Without CSRF verification on it, a page on another site can try to make a signed-in
+visitor's browser submit an action in their name; from 4.2.0 the header guard still refuses a
+request that lacks the `X-Livewire` header or a JSON content type, which an ordinary
+cross-site form cannot send. A custom update route on a different domain or middleware group
+can land in an auth context the rest of the app does not expect. And where the default route
+still answers, anything enforced only on the custom route is optional for the client.
 
-Version notes: NOT identical. `Livewire::setUpdateRoute()` exists in both; v4 force-adds
-`web` and the header guard, v3 does not.
+Version notes: NOT identical, between majors or within v4. `Livewire::setUpdateRoute()`
+exists in every release. Only Livewire 4.2.0 and later append `web` and the header guard and
+retire the default route; no v3 release does (snapshot-internals.md section 5 has the first
+release for each).
 
 Fix: see fixes.md "harden-update-route"
 
@@ -905,7 +962,7 @@ Look for: public properties and action-method parameters with no native type dec
 An untyped public property accepts any JSON shape the client sends (string, array, object,
 number) and hydrates it as-is. A typed property causes a PHP `TypeError` on a wrong-shaped
 value, which Livewire catches: empty-string/null unsets the property to null, and any other
-mismatch is rejected (v4 aborts with HTTP 419 in production; v3 re-throws the `TypeError`).
+mismatch is rejected (HTTP 419 in production on current releases; see the version notes).
 Typing constrains the accepted shapes — defense
 in depth that closes the "smuggle an array where a scalar was expected" class, not a
 standalone vulnerability.
@@ -919,13 +976,15 @@ public function load() { User::where('id', $this->userId)->first(); }
 Why exploitable: with the property untyped, the attacker sends an array or object where the
 code expects a scalar and the unexpected shape reaches the query or write, potentially
 confusing query builders or downstream logic; typing the property (`public int $count`,
-`public ?int $userId`) makes PHP reject the wrong shape with a `TypeError` (a 419 on v4, a
-server error on v3). On its own a missing type is hardening; it becomes material when the
-property feeds sensitive logic.
+`public ?int $userId`) makes PHP reject the wrong shape with a `TypeError` (answered with a
+419, or on older releases a server error). On its own a missing type is hardening; it becomes
+material when the property feeds sensitive logic.
 
-Version notes: both versions reject a wrong-type value on a typed property and unset it on
-empty-string/null. v4 converts the `TypeError` to a 419 in production; v3 re-throws it
-(HandleComponents.php `setComponentPropertyAwareOfTypes()` in v4.3.0 and v3.8.10).
+Version notes: every release rejects a wrong-type value on a typed property and unsets it on
+empty-string/null. v4.3.0 and v3.8.10 both answer 419 in production and re-throw in debug:
+v4.3.0 inside HandleComponents.php `setComponentPropertyAwareOfTypes()`, v3.8.10 by
+re-throwing there and converting it in HandleRequests.php `handleUpdate()`. Before 3.8.0, and
+on v4 before 4.2.0, nothing converts it and the `TypeError` surfaces as a server error.
 
 Fix: see fixes.md "type-everything"
 
@@ -943,8 +1002,13 @@ expensive query, an external call, or a redirect using the incoming value or a p
 property — `updated(...)`, `updating(...)`, `updated{Property}(...)`, `updating{Property}(...)`,
 `hydrate(...)`/`hydrate{Property}(...)`, `boot()`, `booted()`, `mount(...)`. These are NOT on
 the action callable surface (LW-01 explicitly skips them, and they cannot be invoked as
-`$wire` actions; the one exception is v3, where `boot()`/`booted()` are not blocked — see
-LW-01's version notes), which is exactly why they get missed — but `updated{Prop}`/`updating{Prop}`
+`$wire` actions; the exception is every v3 release and v4 before 4.2.0, where `boot()`,
+`booted()`, `rendering()`, `rendered()` and a trait's `mount<Trait>`/`boot<Trait>`/
+`booted<Trait>` are not blocked — see LW-01's version notes), which is exactly why they get
+missed. On releases before 4.4.1 (v3: before 3.8.5) a client can also make `boot()`,
+`mount()` and `booted()` run again through `__lazyLoad`, with the mount params of any lazy
+placeholder it was served (snapshot-internals.md, "Callable surface"), so a side effect there
+is not a once-per-page event. And `updated{Prop}`/`updating{Prop}`
 fire on EVERY update to that property (every keystroke under `wire:model.live`), receiving the
 raw client value as the first argument. A side effect in the hook runs on untrusted input with
 none of an action's authorization.
@@ -963,8 +1027,9 @@ action needed); Livewire fires `updatedStatus` server-side with the attacker's v
 write runs. The same shape DoS's the app when `updatedQuery()` runs an unbounded query on
 every keystroke.
 
-Version notes: identical in v3 and v4; the `updating*`/`updated*`/nested
-`updated{Prop}_{key}` hook firing is the same (SupportLifecycleHooks).
+Version notes: the `updating*`/`updated*`/nested `updated{Prop}_{key}` hook firing is the
+same in v3 and v4 (SupportLifecycleHooks). Which hooks a client can call directly, and
+whether it can make `mount()` run again, depend on the release (above).
 
 Fix: see fixes.md "guard-lifecycle-hook"
 

@@ -181,10 +181,14 @@ claim — what serializes into snapshots, exactly what `#[Locked]` throws, how m
 properties are protected (it is not `#[Locked]`, despite what the docs imply), what happens
 when a client sends a wrong-typed value, and which middleware actually re-runs on component
 updates. Verified against Livewire v4.3.0 and the official 3.x/4.x documentation. The two
-major versions are not identical: on Livewire 3, for one, a custom update route can lose
-CSRF protection, which Livewire 4 prevents. Differences like that were checked against the
-v3.8.10 source and are listed in `references/snapshot-internals.md`. If you find a claim
-that is wrong for a newer Livewire version, please open an issue.
+major versions are not identical, and neither are the releases within one: on Livewire 3,
+and on Livewire 4 before 4.2.0, a custom update route that leaves out the `web` group runs
+without CSRF protection, where later releases add it back. Differences between the majors
+were checked against the v3.8.10 source; where a protection arrived partway through a major,
+the first release that has it was found by reading each release tag. Both are listed in
+`references/snapshot-internals.md`, and the audit reads the app's exact release from
+`composer.lock` so it does not credit an older app with a newer protection. If you find a
+claim that is wrong for a newer Livewire version, please open an issue.
 
 ## License
 

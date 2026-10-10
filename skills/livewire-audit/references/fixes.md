@@ -186,7 +186,7 @@ public $avatar;
 
 Two layers, do BOTH:
 - The `#[Validate]` rule runs on the component's validate/update cycle — it gates what gets stored, but NOT the initial temporary-upload POST.
-- The temporary-upload endpoint (`livewire/upload-file`) is gated only by the GLOBAL `temporary_file_upload.rules` in `config/livewire.php`, whose default is `['required','file','max:12288']` (verified, src/Features/SupportFileUploads/FileUploadConfiguration.php) — 12 MB and ANY MIME type. So an unconstrained app accepts any 12 MB file at the temp endpoint regardless of the property rule. Set a real global rule:
+- The temporary-upload endpoint (route name `livewire.upload-file`; `/livewire/upload-file` on v3, `/livewire-<hash>/upload-file` on v4) is gated only by the GLOBAL `temporary_file_upload.rules` in `config/livewire.php`, whose default is `['required','file','max:12288']` (verified, src/Features/SupportFileUploads/FileUploadConfiguration.php) — 12 MB and ANY MIME type. So an unconstrained app accepts any 12 MB file at the temp endpoint regardless of the property rule. Set a real global rule:
 
 ```php
 // config/livewire.php
@@ -218,7 +218,7 @@ NOT: do not assume your custom middleware re-runs on Livewire updates because `a
 
 ## harden-update-route
 
-When to use (LW-21): you want app-wide middleware or throttling on every Livewire update request — this is a hardening opt-in, rarely a vulnerability on its own.
+When to use (LW-21): a custom update route that runs without `web`, session or CSRF verification, or an exemption that switches CSRF verification off for the update path. Also when you want app-wide middleware or throttling on Livewire update requests — that is a hardening opt-in, rarely a vulnerability on its own.
 
 ```php
 Livewire::setUpdateRoute(fn ($handle) =>
@@ -226,12 +226,12 @@ Livewire::setUpdateRoute(fn ($handle) =>
 );
 ```
 
-Add whatever global middleware your app needs (e.g. a throttle). The two major versions differ here (verified, src/Mechanisms/HandleRequests/HandleRequests.php in v4.3.0 and v3.8.10):
+Add whatever global middleware your app needs (e.g. a throttle). Always name `web` in the route's middleware, as the example does, and never exclude it: no `withoutMiddleware(...)` naming `web`, the session middleware or the CSRF middleware on this route or a group around it, and no CSRF `except` entry that matches its path. Remove such an exclusion or exemption; do not work around it. What the framework does on its own depends on the release (verified, src/Mechanisms/HandleRequests/HandleRequests.php at v3.8.10, v4.1.4, v4.2.0 and v4.3.0):
 
-- **v4:** `setUpdateRoute()` force-adds the `web` group and the Livewire header guard even if you omit them, so you cannot strip CSRF/session through this API. The genuine LW-21 finding is narrow: a custom update route placed on the wrong domain/prefix, or behind an extra middleware group that changes auth context — not "lost CSRF."
-- **v3:** `setUpdateRoute()` adds nothing. The route keeps exactly the middleware your callback gives it, so a custom route that leaves out `web` has no session and no CSRF verification on any component update. Always include `web`, as the example above does.
+- **Livewire 4.2.0 and later** append the `web` group and the Livewire header guard when the callback leaves them out, and answer 404 on the default update route once a custom one exists. They do not undo an exclusion: Laravel removes what a route excludes after Livewire has appended it (`Illuminate\Routing\Router::resolveMiddleware()`).
+- **Every v3 release, and v4 before 4.2.0,** add nothing. The route keeps exactly the middleware your callback gives it, so a custom route that leaves out `web` has no session and no CSRF verification on any component update. The default route is not switched off either. On v3, keep the custom route on `/livewire/update` as above: a route on the same method and path replaces the default one, where a route on another path leaves both answering. Middleware that must run on every update for access control or tenancy belongs on the page's own route and in `Livewire::addPersistentMiddleware(...)` (see "persistent-middleware"), not only on this route.
 
-NOT: on a v4 app, do not report LW-21 as "the update route lost CSRF because web was dropped" — that is not achievable through `setUpdateRoute` in v4. On a v3 app it is achievable, and it is the finding.
+NOT: on Livewire 4.2.0 or later, do not report LW-21 because a custom route merely left `web` out — the framework adds it. On v3 and on v4 before 4.2.0 that is the finding. On any release, an excluded `web`, session or CSRF middleware, or a CSRF exemption that covers the update path, is a finding.
 
 ---
 
@@ -293,7 +293,7 @@ NOT: do not use `cache: true` for per-user data — it is keyed by component nam
 
 When to use (LW-23): public properties and action parameters are untyped, so the engine silently accepts whatever the client sends. `public $ids = [];` becomes `public array $ids = [];`, and `function show($id)` becomes `function show(int $id)`.
 
-Engine behavior: a typed property plus a wrong-type client value raises a `TypeError` that Livewire catches — empty-string/null unsets the property; otherwise v4 aborts with HTTP 419 in production and v3 re-throws the error (verified, HandleComponents.php `setComponentPropertyAwareOfTypes()` in v4.3.0 and v3.8.10). Either way typing turns silent acceptance into rejection.
+Engine behavior: a typed property plus a wrong-type client value raises a `TypeError` that Livewire catches — empty-string/null unsets the property; otherwise the request is rejected. v4.3.0 and v3.8.10 both answer HTTP 419 in production (verified, HandleComponents.php `setComponentPropertyAwareOfTypes()` in each, and HandleRequests.php `handleUpdate()`, which does the converting in v3.8.10); releases before 3.8.0, and v4 before 4.2.0, let the `TypeError` surface as a server error. Either way typing turns silent acceptance into rejection.
 
 NOT: do not type only properties while leaving action parameters untyped — the parameter is a client-controlled surface too.
 
@@ -349,7 +349,7 @@ $this->js('showToast', "Welcome, {$user->display_name}");
 $this->js('(name) => showToast(`Welcome, ${name}`)', $user->display_name);
 ```
 
-A param is never a named variable inside the expression: `$this->js('showToast(name)', ['name' => $value])` leaves `name` undefined in the browser, so it removes the injection and breaks the call.
+A param is never a named variable inside the expression: `$this->js('showToast(name)', ['name' => $value])` hands over the array as one positional param and never binds `name` to the value, so it removes the injection and breaks the call. Keep `await` out of a params-taking expression as well: in v4.3.0 the browser calls the resulting function with its params only on the non-async path (dist/livewire.esm.js, `normalRawEvaluator`), so an expression containing `await` is evaluated and its params are dropped.
 
 If you only need to hand data to Alpine, prefer a dispatched event or a `data-*`/`@js()` attribute over building a code string at all.
 

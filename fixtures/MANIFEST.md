@@ -22,11 +22,12 @@ so the audit tool is graded against the right file:
   component. The component's own missing rule is a separate row.
 - **LW-20** (no `Livewire::addPersistentMiddleware(...)`) — app-level, planted by
   its absence in `v4-app/app/Providers/AppServiceProvider.php`.
-- **LW-21** (no `Livewire::setUpdateRoute(...)` hardened with middleware) —
-  app-level **observation**, planted by its absence everywhere (no provider or
-  route config sets a custom hardened update route). Expected: no finding block. The
-  report's "App-level checks and run notes" section carries one line saying the
-  default update route is in use.
+- **LW-21** (custom update route without the `web` group) — app-level, planted in
+  `v4-app/app/Providers/AppServiceProvider.php`. Whether it is a finding depends on the
+  release, which is what the plant tests: `v4-app/composer.json` allows `^4.0` and there
+  is no lock file, so the app is audited as 4.0.0, and no release before 4.2.0 adds `web`
+  to a custom route. A report that calls it safe because "v4 adds `web`" has missed it.
+  `v3-app` customizes nothing; its expected result is a line, not a finding.
 - **LW-22** (unprotected full-page Livewire component route) — app-level, planted
   in `v4-app/routes/web.php`.
 
@@ -55,7 +56,11 @@ components are fully typed.
   on `profile/show`'s never-rendered `$apiKeys`, or LW-04 on any client-writable
   property reaching a sensitive sink. "No invented findings" is graded against the
   clean components and against findings with no quotable evidence.
-- A check result that is not a finding (LW-21's default route; `/feed` being public by
+- The report's `Livewire release:` line is graded on the release it names: `4.0.0`
+  inferred from `^4.0` for v4-app and `3.6.0` inferred from `^3.6` for v3-app, each with
+  the protections it predates (4.2.0, 4.3.0 and 4.4.1 for v4-app; 3.8.0 and 3.8.5 for
+  v3-app). Neither fixture has a `composer.lock`.
+- A check result that is not a finding (v3-app's default update route; `/feed` being public by
   design; a check that cannot run because v3-app has no `routes/` or `app/Providers/`)
   belongs on a line in the report's "App-level checks and run notes" section. Written
   as a `###` block in any tier, Info included, it is graded as an invented finding.
@@ -148,7 +153,7 @@ Supporting (non-planted) file: `v4-app/resources/views/components/invoices/refun
 | `v4-app/app/Providers/AppServiceProvider.php` | LW-20 | `boot()` exists but never calls `Livewire::addPersistentMiddleware(...)`, so the custom `EnsureUserIsVerified` middleware on `/billing/{orderId}` (`v4-app/routes/web.php`) is not re-applied to component update requests | High |
 | | LW-12 | no `Relation::enforceMorphMap(...)` / morphMap registration anywhere | Medium |
 | `v4-app/config/livewire.php` | LW-14 | `'rules' => null` under `temporary_file_upload`: the default global rule (any file type, 12 MB) gates the temporary-upload endpoint for every component, whatever a property's own rule says | Medium |
-| `v4-app/app/Providers/AppServiceProvider.php` (+ routes) | LW-21 | no `Livewire::setUpdateRoute(...)` hardened with middleware — observation only | none: a line in the app-level section, not a finding |
+| `v4-app/app/Providers/AppServiceProvider.php` | LW-21 | `Livewire::setUpdateRoute(...)` returns `Route::post('/app/livewire/update', $handle)` with no `web` group. The app is audited as Livewire 4.0.0 (`^4.0`, no lock file), which adds nothing to a custom route (4.2.0 is the first release that appends `web`), so every component update runs without session or CSRF verification | High |
 
 Supporting (non-planted) files: `v4-app/composer.json`,
 `v4-app/app/Http/Middleware/EnsureUserIsVerified.php` (the custom middleware on the
@@ -235,7 +240,7 @@ instances across both apps.
 - [x] LW-18 (x3) — messages/composer `send()` no rate limit; billing/checkout `pay()` charges a card with no rate limit; v3 Volt gift-cards/redeem `$redeem` no rate limit on a brute-forceable financial action
 - [x] LW-19 (x7) — messages/composer recipient `['required']` only; unvalidated persists in billing/checkout `pay()`, admin/user-editor `save()`, profile/show `updateDisplayName()`, profile/bulk-update `save()`, v3 OrderEditor `cancel()`, v3 Volt gift-cards/redeem `$redeem`
 - [x] LW-20 (x1) — AppServiceProvider missing `addPersistentMiddleware` (app-level)
-- [x] LW-21 (x1) — missing `setUpdateRoute` hardening (app-level; recorded as a line in the report's app-level section, not a finding)
+- [x] LW-21 (x1) — AppServiceProvider custom update route without `web`, on a release that does not add it (app-level)
 - [x] LW-22 (x2) — routes/web.php unprotected `/account/settings` and `/admin/users/{userId}`
 - [x] LW-23 (x11) — untyped public properties across billing/checkout, admin/user-editor, messages/composer, v3 OrderEditor, orders/status-editor, social/greeting, auth/return-redirect, profile/show, feed/index, uploads/avatar, stats/dashboard
 - [x] LW-24 (x1) — orders/status-editor `updatedStatus()` hook writes with no ownership check

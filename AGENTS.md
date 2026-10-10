@@ -99,10 +99,17 @@ force-injects) is verified against **Livewire v4.3.0 source** and the official 3
 cited in the reference files. A statement that Livewire 3 behaves the same, or differently, is
 checked against the **v3.8.10 source**; `snapshot-internals.md` section 5 lists the differences
 found, and they are real (v3's `setUpdateRoute` does not force-add `web`). Do not write "identical
-in v3 and v4" without that check. Do not add or change a behavioral claim without a source citation —
-unverified claims are the one thing that destroys this skill's value. Several checklist notes exist
-specifically to correct plausible-but-wrong assumptions (e.g. model-typed properties are NOT
-protected by `#[Locked]`; `setUpdateRoute` cannot strip CSRF because `web` is force-added).
+in v3 and v4" without that check. A fact read at one release is a fact about that release, not
+about its whole major version: several protections arrived partway through v4 (forced `web` on a
+custom update route and the blocking of `boot()` as an action in 4.2.0, `#[Authorize]` in 4.3.0),
+and a note that says "v4 does X" for one of them makes the audit miss real findings on older apps.
+When a claim is a protection the audit relies on to NOT report something, find the first release
+that has it by reading the file at the tags on either side of the change, state that release in
+the checklist's version notes, and add it to the first-release table in section 5. Do not add or
+change a behavioral claim without a source citation — unverified claims are the one thing that
+destroys this skill's value. Several checklist notes exist specifically to correct
+plausible-but-wrong assumptions (e.g. model-typed properties are NOT protected by `#[Locked]`;
+appending `web` to a custom update route does not survive the route excluding it).
 
 ## Hard invariants the skill itself enforces (preserve these when editing SKILL.md)
 
