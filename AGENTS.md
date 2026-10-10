@@ -67,7 +67,9 @@ advertises the check list to users).
   fixes.md (via a referenced fix pattern and that pattern's `When to use (LW-NN)` line), MANIFEST.md
   (planted at least once), SKILL.md (the check count, the app-level list in Step D, the
   LW-01..LW-27 walk in Step F) and is summarized in README.md. Adding/removing/renumbering a check
-  means updating all of them, and planting the new check in a fixture.
+  means updating all of them, and planting the new check in a fixture. The plugin's marketplace
+  listing, which lives in a separate repo, also describes the checks and states the count; check it
+  when a check or a group is added, removed or renamed.
 - **Fix-pattern names in `fixes.md` are a fixed interface.** checklist.md references them by name
   (e.g. `authorize-in-action`, `lock-scalar`, `computed-instead-of-public`). Do not rename a pattern
   without updating every reference that points at it: the `Fix: see fixes.md "..."` lines, and
